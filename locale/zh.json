@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin Updater",
+    "description": "检查自行安装的插件是否有新版，显示更新提示并按需更新。"
+  }
+}

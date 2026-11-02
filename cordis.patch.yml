@@ -1,0 +1,5 @@
+- insert:
+    - id: plugin-updater
+      name: dsh-plugin-updater
+      config:
+        autoCheck: true
