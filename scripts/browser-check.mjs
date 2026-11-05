@@ -20,7 +20,16 @@ const nativeFactory=new Function('react','react_jsx_runtime','_deepseek_ai_dsh_c
 const {PackageCard}=nativeFactory(React,{jsx,jsxs,Fragment:React.Fragment},{Tag:({children})=>h('span',null,children)},styles,p=>({title:p.title||p.name,description:p.description}),p=>p.enabled?'running':'disabled',()=>h('span',{className:'fixture-icon'}),Enable,Empty,()=>false);
 const packages=[{name:'dsh-better-sidebar',title:'Better Sidebar',version:'0.25.0',enabled:false,description:'更好用的右侧边栏——文件树、编辑器、任务和侧边对话。'},{name:'dsh-reply-suggestions',title:'Reply Suggestions',version:'0.1.20',enabled:true,description:'根据上一轮对话，自动推荐下一句提问。'},{name:'dsh-selection-group',title:'Selection Toolbar',version:'1.6.5',enabled:true,description:'选中文字后，批注、引用或放入侧边对话。'}].map(p=>({...p,installed:true,official:false,availability:'profile',rows:[],removable:true}));
 let server={autoCheck:true,checking:false,error:null,plugins:[],lastAttemptAt:null,job:null};let opened=0;let updates=0;let checks=0;
-function snapshot(){server.plugins=packages.map((p,i)=>({name:p.name,installedVersion:p.version,enabled:p.enabled,status:i===0&&p.version==='0.25.0'?'available':'current',...(i===0&&p.version==='0.25.0'?{targetVersion:'0.28.2',token:'11111111-1111-1111-1111-111111111111',notes:'优化大体积历史会话读取，降低启动时内存占用。'}:{})}));if(server.job?.phase==='installing')server.plugins[0].status='updating';return JSON.parse(JSON.stringify(server));}
+function snapshot(){
+  server.plugins=packages.map((p,i)=>{
+    const installed={name:p.name,installedVersion:p.version,enabled:p.enabled};
+    if(i!==0)return {...installed,status:'current'};
+    if(server.job?.phase==='installing')return {...installed,status:'updating',targetVersion:'0.28.2'};
+    if(p.version==='0.25.0')return {...installed,status:'available',targetVersion:'0.28.2',token:'11111111-1111-1111-1111-111111111111',notes:'优化大体积历史会话读取，降低启动时内存占用。'};
+    return {...installed,status:'blocked',latestVersion:'0.30.1',reason:'需要 DSH ^0.2.2-rc.1（当前 0.2.1-rc.5）',url:'https://www.npmjs.com/package/dsh-better-sidebar/v/0.30.1'};
+  });
+  return JSON.parse(JSON.stringify(server));
+}
 const reactRoot=ReactDOM.createRoot(document.getElementById('native-root'));
 function packageCard(p){return h(PackageCard,{key:p.name,pkg:p,t:k=>k,resolveText:x=>x,onOpen:()=>opened++,onSetEnabled:enabled=>{p.enabled=enabled;renderNative();}})}
 function group(id,title,rows){return h('section',{'data-plugin-group':id,'data-plugin-scope':'global',className:styles.group},h('div',{className:styles.groupHead},h('h3',{className:styles.groupTitle},title)),h('ul',{className:styles.cards},rows.map(packageCard)))}
@@ -51,6 +60,21 @@ try {
   await delay(1500);
   const final = await chrome.evaluate(`({updates:window.__fixture.updates,opened:window.__fixture.opened,enabled:document.querySelector('[data-plugin-package="dsh-better-sidebar"] input').checked,version:document.querySelector('[data-plugin-package="dsh-better-sidebar"] .dshpu-version').textContent})`);
   assert.equal(final.updates, 1); assert.equal(final.opened, 0); assert.equal(final.enabled, false); assert.match(final.version, /0.28.2/);
+  await chrome.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 920, deviceScaleFactor: 1, mobile: false });
+  const blocked = await chrome.evaluate(`(() => {
+    const card = document.querySelector('[data-plugin-package="dsh-better-sidebar"]');
+    const release = card.querySelector('.dshpu-actions a');
+    return { version: card.querySelector('.dshpu-version').textContent, href: release.href,
+      releaseVisible: release.getBoundingClientRect().width > 0,
+      updateVisible: card.querySelector('.dshpu-primary').getBoundingClientRect().width > 0,
+      overflow: document.documentElement.scrollWidth > innerWidth };
+  })()`);
+  assert.match(blocked.version, /新版 0\.30\.1/);
+  assert.match(blocked.href, /\/v\/0\.30\.1$/);
+  assert.equal(blocked.releaseVisible, true);
+  assert.equal(blocked.updateVisible, false);
+  assert.equal(blocked.overflow, false);
+  console.log('PASS: incompatible release information remains actionable at 320px');
   await chrome.evaluate('window.__fixture.stop()'); assert.equal(await chrome.evaluate('document.querySelectorAll("[data-dshpu-owned]").length'), 0);
   console.log('PASS: pointer click, update polling, disabled-state preservation, React reconciliation and cleanup');
   console.log(`Preview: ${fileURLToPath(preview)}`);

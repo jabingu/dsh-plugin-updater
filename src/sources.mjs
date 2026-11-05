@@ -28,20 +28,37 @@ export function sourceOf(bundle) {
 export function fingerprint(bundle, runtimeVersion) {
   return JSON.stringify([bundle.name, bundle.version ?? '', bundle.source ?? '', runtimeVersion]);
 }
+function dshRequirementText(requirements, runtimeVersion) {
+  const ranges = [...new Set(Object.values(requirements))];
+  return `需要 DSH ${ranges.join(' 且 ')}（当前 ${runtimeVersion}）`;
+}
+export function normalizeCachedReason(reason, runtimeVersion) {
+  const prefix = '需要其他 DSH 版本：';
+  if (typeof reason !== 'string' || !reason.startsWith(`${prefix}{`)) return reason;
+  try { return dshRequirementText(JSON.parse(reason.slice(prefix.length)), runtimeVersion); }
+  catch { return `当前 DSH ${runtimeVersion} 不满足新版的版本要求`; }
+}
+export function npmVersionUrl(name, version) {
+  const path = name.split('/').map(encodeURIComponent).join('/');
+  return `https://www.npmjs.com/package/${path}/v/${encodeURIComponent(version)}`;
+}
 export function compatibilityReason(manifest, runtimeVersion, evaluate, environment = process) {
   if (!manifest?.dsh?.bundle?.patch) return '新版没有声明 DSH 插件组合包';
   try {
     if (evaluate) {
       const issue = evaluate(manifest, {}, runtimeVersion);
-      if (issue) return `需要其他 DSH 版本：${JSON.stringify(issue.requirements)}`;
+      if (issue) return dshRequirementText(issue.requirements, runtimeVersion);
     } else {
       const requirements = Object.hasOwn(manifest.engines ?? {}, 'dsh')
         ? { 'engines.dsh': manifest.engines.dsh }
         : Object.fromEntries(Object.entries(manifest.peerDependencies ?? {}).filter(([n]) => n === '@deepseek-ai/dsh' || n.startsWith('@deepseek-ai/dsh-')));
+      const unmet = {};
       for (let [key, range] of Object.entries(requirements)) {
         if (key !== 'engines.dsh' && ['workspace:*', 'workspace:^', 'workspace:~'].includes(range)) range = runtimeVersion;
-        if (typeof range !== 'string' || !semver.satisfies(runtimeVersion, range, { includePrerelease: true })) return `需要其他 DSH 版本：${key} ${range}`;
+        if (typeof range !== 'string') return '新版兼容性声明无效';
+        if (!semver.satisfies(runtimeVersion, range, { includePrerelease: true })) unmet[key] = range;
       }
+      if (Object.keys(unmet).length) return dshRequirementText(unmet, runtimeVersion);
     }
     if (manifest.engines?.node && !semver.satisfies(environment.versions.node, manifest.engines.node)) return `需要 Node.js ${manifest.engines.node}`;
     for (const [key, actual] of [['os', environment.platform], ['cpu', environment.arch]]) {
@@ -59,7 +76,7 @@ export function chooseCandidate(bundle, candidates, runtimeVersion, evaluate) {
     .sort((a, b) => semver.rcompare(a.manifest.version, b.manifest.version));
   const compatible = newer.find(c => !compatibilityReason(c.manifest, runtimeVersion, evaluate));
   if (compatible) return { status: 'available', candidate: compatible, latestVersion: newer[0].manifest.version };
-  if (newer.length) return { status: 'blocked', latestVersion: newer[0].manifest.version,
+  if (newer.length) return { status: 'blocked', latestVersion: newer[0].manifest.version, url: newer[0].url,
     reason: compatibilityReason(newer[0].manifest, runtimeVersion, evaluate) };
   return { status: 'current' };
 }
@@ -99,7 +116,7 @@ export function createInspector({ lookupNpm, registries, fetchJson, evaluate, ru
           const manifests = Array.isArray(metadata) ? metadata : [metadata];
           if (!manifests.length || manifests.some(m => m.name !== bundle.name || !semver.valid(m.version))) throw new Error('注册表返回的版本信息无效');
           candidates = manifests.map(manifest => ({ manifest, spec: `${bundle.name}@${manifest.version}`, registry,
-            notes: typeof manifest.description === 'string' ? manifest.description : '', url: `https://www.npmjs.com/package/${encodeURIComponent(bundle.name)}` }));
+            notes: typeof manifest.description === 'string' ? manifest.description : '', url: npmVersionUrl(bundle.name, manifest.version) }));
           break;
         } catch (error) { lastError = error; if (signal?.aborted) throw error; }
       }
@@ -123,7 +140,8 @@ export function createInspector({ lookupNpm, registries, fetchJson, evaluate, ru
         if (content.encoding !== 'base64' || typeof content.content !== 'string' || content.content.length > 1400000) throw new Error('GitHub 插件清单不可读');
         const manifest = JSON.parse(Buffer.from(content.content, 'base64').toString('utf8'));
         if (manifest.name !== bundle.name || !semver.valid(manifest.version)) throw new Error('GitHub 包身份与已安装插件不匹配');
-        candidates.push({ manifest, spec: `${source.repository}.git#${commit.sha}`, notes: String(notes).slice(0,12000), url: source.repository });
+        const url = stable.length ? `${source.repository}/releases/tag/${encodeURIComponent(ref)}` : source.repository;
+        candidates.push({ manifest, spec: `${source.repository}.git#${commit.sha}`, notes: String(notes).slice(0,12000), url });
       }
     }
     const chosen = chooseCandidate(bundle, candidates, runtimeVersion, evaluate);

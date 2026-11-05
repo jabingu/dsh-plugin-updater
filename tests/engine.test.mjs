@@ -103,6 +103,17 @@ test('runtime changes invalidate an earlier compatibility check', async () => {
   const f = fixture({ state: { results: { 'dsh-example': { status: 'available', fingerprint: fingerprint(old, '0.2.1-rc.2') } } } });
   assert.equal((await f.engine.snapshot()).plugins[0].status, 'unchecked');
 });
+test('previously cached incompatibility is readable and links to the blocked npm version', async () => {
+  const old = { name: 'dsh-example', version: '1.0.0', source: 'dsh-example@^1.0.0' };
+  const requirements = { '@deepseek-ai/dsh-tools': '^0.2.2-rc.1', '@deepseek-ai/dsh-agent': '^0.2.2-rc.1' };
+  const f = fixture({ state: { results: { 'dsh-example': { status: 'blocked', latestVersion: '1.1.0',
+    fingerprint: fingerprint(old, '0.2.1-rc.5'), reason: `需要其他 DSH 版本：${JSON.stringify(requirements)}` } } } });
+  const [plugin] = (await f.engine.snapshot()).plugins;
+  assert.equal(plugin.reason, '需要 DSH ^0.2.2-rc.1（当前 0.2.1-rc.5）');
+  assert.equal(plugin.url, 'https://www.npmjs.com/package/dsh-example/v/1.1.0');
+  assert.equal(plugin.token, undefined);
+  assert.equal(f.checks, 0);
+});
 test('GitHub update refuses to remove code without a known immutable rollback source', async () => {
   const f = fixture(); f.setBundles([{ name: 'dsh-example', version: '1.0.0', source: 'https://github.com/u/p', installed: true, enabled: false }]);
   await update(f); const result = await f.engine.waitForIdle(); assert.match(result.job.error, /恢复来源/); assert.equal(f.calls.length, 0);

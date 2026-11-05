@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { JSDOM } from 'jsdom';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { summaryText, badgeCount } from '../src/common.mjs';
+import { summaryText, badgeCount, versionText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -18,6 +18,9 @@ runInNewContext(readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8
 
 const plugin = { name: 'dsh-example', installedVersion: '1.0.0', targetVersion: '1.1.0', enabled: false,
   status: 'available', token: '1'.repeat(36), notes: 'Fixed memory usage', sourceKind: 'npm' };
+const blocked = { name: plugin.name, installedVersion: plugin.installedVersion, enabled: false,
+  status: 'blocked', latestVersion: '2.0.0', reason: '需要 DSH ^0.2.2-rc.1（当前 0.2.1-rc.5）',
+  url: 'https://www.npmjs.com/package/dsh-example/v/2.0.0' };
 function snapshot(extra = {}) { return { plugins: [plugin], autoCheck: true, checking: false, busy: false,
   error: null, lastAttemptAt: '2026-11-02T00:00:00.000Z', ...extra }; }
 function card(name) { return `<li data-plugin-package="${name}"><div class="actual-card-head"><span>icon</span><div><div><button type="button">${name}</button></div><span>Description</span></div><div><label><input type="checkbox" role="switch"></label></div></div></li>`; }
@@ -30,7 +33,7 @@ function setup() {
   const store = { getSnapshot: () => current, subscribe: f => { listeners.add(f); return () => listeners.delete(f); },
     check: async () => calls.push(['check']), setSchedule: async v => calls.push(['schedule', v]), update: async name => calls.push(['update', name]) };
   const before = dom.window.document.body.innerHTML;
-  const stop = createDomAdapter({ document: dom.window.document, store, summaryText, badgeCount, sidebarLabel: () => '插件' });
+  const stop = createDomAdapter({ document: dom.window.document, store, summaryText, badgeCount, versionText, sidebarLabel: () => '插件' });
   return { dom, document: dom.window.document, store, calls, before, stop,
     set(next) { current = next; for (const f of listeners) f(); } };
 }
@@ -74,6 +77,30 @@ test('failed checks do not retain an update badge or enabled update button', asy
   const f = setup(); f.set(snapshot({ plugins: [{ ...plugin, status: 'error', reason: 'offline' }] })); await wait(5);
   assert.equal(f.document.querySelector('.dshpu-nav-badge').hidden, true); assert.equal(f.document.querySelector('.dshpu-actions').hidden, true);
   assert.match(f.document.querySelector('.dshpu-summary').textContent, /失败/); f.stop(); f.dom.window.close();
+});
+test('blocked versions offer release information in the list and details without an install action', async () => {
+  const f = setup();
+  f.set(snapshot({ plugins: [blocked] })); await wait(5);
+  const { document } = f;
+  const action = document.querySelector('.dshpu-actions');
+  const link = action.querySelector('a');
+  assert.equal(action.hidden, false);
+  assert.equal(action.querySelector('button').hidden, true);
+  assert.equal(link.hidden, false);
+  assert.equal(link.href, blocked.url);
+  assert.equal(link.textContent, '查看新版');
+  assert.match(document.querySelector('.dshpu-version').textContent, /1\.0\.0 · 新版 2\.0\.0 · 需要 DSH/);
+  assert.equal(document.querySelector('.dshpu-nav-badge').hidden, true);
+  const subject = { kind: 'bundle', pkg: { name: plugin.name, installed: true } };
+  const render = kind => renderToStaticMarkup(React.createElement(client.DetailContribution, { subject, store: f.store, kind }));
+  assert.equal(render('actions'), '');
+  assert.match(render('badge'), /暂不兼容/);
+  assert.match(render('section'), /新版 2\.0\.0.*查看新版/);
+  f.set(snapshot()); await wait(5);
+  assert.equal(link.hidden, true);
+  assert.equal(link.hasAttribute('href'), false);
+  assert.equal(action.querySelector('button').hidden, false);
+  f.stop(); f.dom.window.close();
 });
 test('current plugins hide the action visually, not just through the hidden property', async () => {
   const f = setup(); f.set(snapshot({ plugins: [{ ...plugin, status: 'current' }] })); await wait(5);

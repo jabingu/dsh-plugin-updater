@@ -56,3 +56,10 @@ export function summaryText(snapshot) {
 export function badgeCount(snapshot) {
   return snapshot?.plugins.filter(p => p.status === 'available').length ?? 0;
 }
+export function versionText(plugin) {
+  const installed = plugin.installedVersion || '未知版本';
+  if (plugin.status === 'blocked') {
+    return plugin.latestVersion ? `${installed} · 新版 ${plugin.latestVersion}` : installed;
+  }
+  return plugin.targetVersion ? `${installed} → ${plugin.targetVersion}` : installed;
+}

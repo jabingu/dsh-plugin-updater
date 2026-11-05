@@ -2,7 +2,7 @@
 
 const CSS = `
 [data-dshpu-owned]{box-sizing:border-box;color:var(--dsw-alias-label-primary,CanvasText);font:inherit}
-.dshpu-button{position:relative;z-index:2;white-space:nowrap;font-size:12px;border:1px solid var(--dsw-alias-border-l3,ButtonBorder);border-radius:7px;background:var(--dsw-alias-bg-layer-2,Canvas);color:var(--dsw-alias-label-primary,CanvasText);padding:5px 10px;cursor:pointer;line-height:20px}
+.dshpu-button{position:relative;z-index:2;white-space:nowrap;font-size:12px;border:1px solid var(--dsw-alias-border-l3,ButtonBorder);border-radius:7px;background:var(--dsw-alias-bg-layer-2,Canvas);color:var(--dsw-alias-label-primary,CanvasText);padding:5px 10px;cursor:pointer;line-height:20px;text-decoration:none}
 .dshpu-button:disabled{opacity:.55;cursor:default}.dshpu-button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,ButtonFace)}
 .dshpu-primary{background:var(--dsw-alias-label-primary,ButtonText);color:var(--dsw-alias-bg-layer-2,ButtonFace);border-color:transparent}
 .dshpu-primary:hover:not(:disabled){background:var(--dsw-alias-label-secondary,ButtonText)}
@@ -21,7 +21,7 @@ const CSS = `
 [data-dshpu-owned][hidden]{display:none!important}
 `;
 
-function createDomAdapter({ document, store, summaryText, badgeCount, sidebarLabel = () => null }) {
+function createDomAdapter({ document, store, summaryText, badgeCount, versionText, sidebarLabel = () => null }) {
   let disposed = false;
   let scheduled = null;
   let groupMount = null;
@@ -74,8 +74,12 @@ function createDomAdapter({ document, store, summaryText, badgeCount, sidebarLab
     const notes = element('div', 'dshpu-notes'); notes.hidden = true; card.append(notes);
     showNotes.addEventListener('click', event => { event.stopPropagation(); event.preventDefault(); notes.hidden = !notes.hidden; showNotes.setAttribute('aria-expanded', String(!notes.hidden)); });
     version.append(text, showNotes);
-    const action = element('span', 'dshpu-actions'); const update = button('更新', () => store.update(name), true); action.append(update); end.prepend(action);
-    const mounted = { main, badge, version, text, showNotes, notes, action, update }; cards.set(card, mounted); return mounted;
+    const action = element('span', 'dshpu-actions'); const update = button('更新', () => store.update(name), true);
+    const release = element('a', 'dshpu-button', '查看新版');
+    release.target = '_blank'; release.rel = 'noreferrer';
+    release.addEventListener('click', event => event.stopPropagation());
+    action.append(update, release); end.prepend(action);
+    const mounted = { main, badge, version, text, showNotes, notes, action, update, release }; cards.set(card, mounted); return mounted;
   }
   function sync() {
     if (disposed) return;
@@ -104,10 +108,14 @@ function createDomAdapter({ document, store, summaryText, badgeCount, sidebarLab
       const m = cards.get(card) ?? makeCard(card, p.name); if (!m) continue;
       const badgeLabel = { available: '可更新', blocked: '暂不兼容', error: '检查或更新失败', updating: '正在更新', 'restart-required': '待重启' }[p.status];
       m.badge.hidden = !badgeLabel; setText(m.badge, badgeLabel);
-      setText(m.text, `${p.installedVersion || '未知版本'}${p.targetVersion ? ` → ${p.targetVersion}` : ''}${p.status === 'current' ? ' · 已是最新' : ''}${p.reason ? ` · ${p.reason}` : p.status === 'unchecked' ? ' · 尚未检查' : ''}`);
-      m.action.hidden = !['available', 'updating'].includes(p.status);
+      setText(m.text, `${versionText(p)}${p.status === 'current' ? ' · 已是最新' : ''}${p.reason ? ` · ${p.reason}` : p.status === 'unchecked' ? ' · 尚未检查' : ''}`);
+      m.update.hidden = !['available', 'updating'].includes(p.status);
       m.update.disabled = p.status !== 'available' || snapshot.busy || !!snapshot.error || !!snapshot.uiError || !!active;
       setText(m.update, p.status === 'updating' ? '正在更新…' : '更新');
+      m.release.hidden = p.status !== 'blocked' || !p.url?.startsWith('https://');
+      if (m.release.hidden) m.release.removeAttribute('href');
+      else m.release.href = p.url;
+      m.action.hidden = m.update.hidden && m.release.hidden;
       m.showNotes.hidden = !p.notes;
       setText(m.notes, `${p.targetVersion ?? p.latestVersion ?? ''} 更新信息\n${p.notes ?? ''}`);
     }

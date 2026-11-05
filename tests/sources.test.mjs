@@ -39,8 +39,13 @@ test('select highest compatible stable release, ignore deprecated and prerelease
   assert.equal(result.candidate.manifest.version, '0.28.2'); assert.equal(result.latestVersion, '1.0.0');
 });
 test('all newer versions incompatible gives a blocked status instead of latest', () => {
-  const result = chooseCandidate(bundle, [candidate('1.0.0', { engines: { dsh: '>=1' } })], '0.2.1-rc.5');
-  assert.equal(result.status, 'blocked'); assert.match(result.reason, /DSH/);
+  const requirements = { '@deepseek-ai/dsh-tools': '^0.2.2-rc.1', '@deepseek-ai/dsh-agent': '^0.2.2-rc.1' };
+  const release = { ...candidate('1.0.0'), url: 'https://www.npmjs.com/package/dsh-example/v/1.0.0' };
+  const result = chooseCandidate(bundle, [release], '0.2.1-rc.5', () => ({ requirements }));
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.reason, '需要 DSH ^0.2.2-rc.1（当前 0.2.1-rc.5）');
+  assert.equal(result.url, release.url);
+  assert.equal(result.candidate, undefined);
 });
 test('DSH engine overrides peers, and prerelease DSH participates in ranges', () => {
   assert.equal(compatibilityReason(manifest('0.28.2', { engines: { dsh: '>=0.2.1-rc.1' },
