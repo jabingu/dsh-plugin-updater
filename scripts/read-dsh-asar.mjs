@@ -19,18 +19,24 @@ try {
     }
   }
   walk(tree.files);
-  for (const name of process.argv.slice(2)) {
-    const source = `dsh/node_modules/@deepseek-ai/${name}/lib/${name.startsWith('dsh-client-') ? 'client.js' : 'index.js'}`;
+  function readEntry(source) {
     const entry = entries.get(source);
     if (!entry || entry.unpacked) throw new Error(`Packed entry unavailable: ${source}`);
     const data = Buffer.alloc(entry.size);
     readSync(fd, data, 0, data.length, base + Number(entry.offset));
-    const directory = resolve('work/dsh-0.2.1-rc.5');
+    return data;
+  }
+  const manifest = JSON.parse(readEntry('dsh/node_modules/@deepseek-ai/dsh/package.json'));
+  if (!/^[0-9A-Za-z.+-]+$/.test(manifest.version)) throw new Error('Invalid DSH version');
+  const directory = resolve(`work/dsh-${manifest.version}`);
+  for (const name of process.argv.slice(2)) {
+    const source = `dsh/node_modules/@deepseek-ai/${name}/lib/${name.startsWith('dsh-client-') ? 'client.js' : 'index.js'}`;
+    const data = readEntry(source);
     const target = resolve(directory, `${name}.js`);
     const child = relative(directory, target);
     if (!child || child.startsWith('..') || isAbsolute(child)) throw new Error('Invalid output path');
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, data);
-    console.log(`${name}: ${entry.size} bytes -> ${target}`);
+    console.log(`${name}: ${data.length} bytes -> ${target}`);
   }
 } finally { closeSync(fd); }

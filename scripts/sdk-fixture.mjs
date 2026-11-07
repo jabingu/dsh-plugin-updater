@@ -1,9 +1,12 @@
 import { readFile } from 'node:fs/promises';
 
 export async function sdkFixture() {
-  const client = await readFile(new URL('../work/dsh-0.2.1-rc.5/dsh-client-ui-plugin-manager.js', import.meta.url), 'utf8');
-  const sidebar = await readFile(new URL('../work/dsh-0.2.1-rc.5/dsh-client-ui-sidebar.js', import.meta.url), 'utf8');
-  const manager = await readFile(new URL('../work/dsh-0.2.1-rc.5/dsh-plugin-manager.js', import.meta.url), 'utf8');
+  const version = process.env.DSH_SDK_VERSION ?? '0.2.1-rc.5';
+  if (!/^[0-9A-Za-z.+-]+$/.test(version)) throw new Error('Invalid DSH SDK version');
+  const directory = new URL(`../work/dsh-${version}/`, import.meta.url);
+  const client = await readFile(new URL('dsh-client-ui-plugin-manager.js', directory), 'utf8');
+  const sidebar = await readFile(new URL('dsh-client-ui-sidebar.js', directory), 'utf8');
+  const manager = await readFile(new URL('dsh-plugin-manager.js', directory), 'utf8');
   function declaration(name) {
     const start = client.indexOf(`\n\t\tfunction ${name}(`);
     const end = client.indexOf('\n\t\tfunction ', start + 2);
@@ -14,6 +17,6 @@ export async function sdkFixture() {
   if (!raw) throw new Error('SDK CSS unavailable');
   const css = JSON.parse(raw[1]);
   const prefix = css.match(/\.([\w-]+)_cardHead\{/)[1];
-  return { client, sidebar, manager, css, prefix,
+  return { version, client, sidebar, manager, css, prefix,
     functions: declaration('CardHead') + declaration('PackageCard') };
 }

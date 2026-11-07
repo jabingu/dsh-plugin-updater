@@ -1,13 +1,13 @@
 {
   "name": "dsh-plugin-updater",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Check for updates to user-installed DSH plugins, show update badges, and update on demand.",
   "type": "module",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/jabingu/dsh-plugin-updater.git" },
   "homepage": "https://github.com/jabingu/dsh-plugin-updater#readme",
   "bugs": { "url": "https://github.com/jabingu/dsh-plugin-updater/issues" },
-  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": "0.2.1-rc.5" },
+  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": "0.2.1-rc.5 || 0.2.2-rc.1" },
   "main": "lib/index.mjs",
   "exports": {
     ".": "./lib/index.mjs",
@@ -24,13 +24,13 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-atomic-write": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-subprocess": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5"
+    "@deepseek-ai/cordis": "~4.0.5 || ~4.1.0",
+    "@deepseek-ai/dsh": "0.2.1-rc.5 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.5 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-atomic-write": "0.2.1-rc.5 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.5 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess": "0.2.1-rc.5 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5 || 0.2.2-rc.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": { "optional": true },

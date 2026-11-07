@@ -5,7 +5,7 @@ import React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
 import { sdkFixture } from './sdk-fixture.mjs';
-import { summaryText, badgeCount } from '../src/common.mjs';
+import { summaryText, badgeCount, versionText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
 const sdk = await sdkFixture();
@@ -36,7 +36,7 @@ function render(enabled) {
 }
 try {
   render(false); await new Promise(r => setTimeout(r, 25));
-  const stop = createDomAdapter({ document, store, summaryText, badgeCount });
+  const stop = createDomAdapter({ document, store, summaryText, badgeCount, versionText });
   assert.equal(document.querySelectorAll('.dshpu-actions').length, 1);
   assert.equal(document.querySelector('input[role="switch"]').checked, false);
   render(true); await new Promise(r => setTimeout(r, 25));
@@ -44,5 +44,5 @@ try {
   assert.equal(document.querySelectorAll('.dshpu-actions').length, 1);
   assert.equal(document.querySelectorAll('.dshpu-version').length, 1);
   stop(); assert.equal(document.querySelector('[data-dshpu-owned]'), null);
-  console.log('PASS: actual DSH 0.2.1-rc.5 PackageCard, React reconciliation, detail slots and manager API contract.');
+  console.log(`PASS: actual DSH ${sdk.version} PackageCard, React reconciliation, detail slots and manager API contract.`);
 } finally { root.unmount(); globalThis.window = previous.window; globalThis.document = previous.document; dom.window.close(); }

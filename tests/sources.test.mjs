@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import semver from 'semver';
 import { userBundles, sourceOf, compatibilityReason, chooseCandidate, registryPlan, createInspector } from '../src/sources.mjs';
 import { validateUpdate, validateSchedule, descriptors, summaryText } from '../src/common.mjs';
 
@@ -7,6 +9,23 @@ const bundle = { name: 'dsh-example', version: '0.25.0', installed: true, offici
   availability: 'profile', source: 'dsh-example@^0.25.0' };
 const manifest = (version, extra = {}) => ({ name: bundle.name, version, dsh: { bundle: { patch: './cordis.patch.yml' } }, ...extra });
 const candidate = (version, extra = {}) => ({ manifest: manifest(version, extra), spec: `dsh-example@${version}` });
+
+test('published metadata admits both verified DSH runtimes and their Cordis versions', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
+  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1']) {
+    assert.equal(compatibilityReason(pkg, runtime), null);
+    for (const [name, range] of Object.entries(pkg.peerDependencies)) {
+      if (name !== '@deepseek-ai/cordis') assert.equal(semver.satisfies(runtime, range), true, name);
+    }
+  }
+  for (const cordis of ['4.0.5', '4.1.0']) assert.equal(semver.satisfies(cordis, pkg.peerDependencies['@deepseek-ai/cordis']), true);
+  for (const runtime of ['0.2.0-rc.2', '0.2.2-alpha.3', '0.2.3-rc.1']) assert.match(compatibilityReason(pkg, runtime), /需要 DSH/);
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].version, pkg.version);
+  assert.deepEqual(lock.packages[''].engines, pkg.engines);
+  assert.deepEqual(lock.packages[''].peerDependencies, pkg.peerDependencies);
+});
 
 test('inventory includes disabled downloads, excludes official, shipped and transitive packages', () => {
   const values = [bundle, { ...bundle, name: 'official', official: true }, { ...bundle, name: 'shipped', availability: 'installation' },

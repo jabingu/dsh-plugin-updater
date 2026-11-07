@@ -8,8 +8,8 @@ A plugin update checker for [DeepSeek Harness](https://github.com/deepseek-ai/de
 
 | Item | Current version / requirement |
 | --- | --- |
-| Plugin | `0.1.0` (package: `dsh-plugin-updater`) |
-| DSH | `0.2.1-rc.5` (official desktop app) |
+| Plugin | `0.1.1` (package: `dsh-plugin-updater`) |
+| DSH | `0.2.1-rc.5` / `0.2.2-rc.1` (official desktop app) |
 | License | [MIT](./LICENSE) |
 
 ## Features
@@ -34,7 +34,7 @@ Captured from a test page running the actual `0.1.0` plugin client and DSH `0.2.
 ### From GitHub
 
 1. Open DSH's **Plugins** page and check whether `dsh-plugin-updater` is already installed. Maintain the existing source instead of adding a duplicate.
-2. Confirm that the official desktop app is `0.2.1-rc.5`.
+2. Confirm that the official desktop app is `0.2.1-rc.5` or `0.2.2-rc.1`.
 3. Click **Add plugin** and enter this repository address:
 
    ```text
@@ -49,7 +49,7 @@ The repository includes built `lib/` files, so no local build is needed to insta
 ### From a local directory
 
 1. Open DSH's **Plugins** page and check whether `dsh-plugin-updater` is already installed. If it is linked locally, update that directory instead of adding it again.
-2. Confirm that the official desktop app is `0.2.1-rc.5`.
+2. Confirm that the official desktop app is `0.2.1-rc.5` or `0.2.2-rc.1`.
 3. Click **Add plugin** and enter the absolute path of the directory containing this plugin's `package.json`.
 4. Follow the app's instructions and choose **立即启用** (Enable now). It took effect immediately in the local desktop check. If the app requests a restart, fully quit and reopen DSH.
 5. Scroll to **已安装插件** (Installed plugins) and check that **检查更新** (Check for updates) appears.
@@ -60,7 +60,7 @@ For a linked installation, update the original directory, rebuild and restart DS
 
 ### From a package archive
 
-Enter the absolute path of `dsh-plugin-updater-0.1.0.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
+Enter the absolute path of `dsh-plugin-updater-0.1.1.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
 
 The desktop app manages its own profile; use its plugin page. If you use `dsh web`, run from the plugin directory:
 
@@ -105,9 +105,9 @@ npm run build
 npm test
 ```
 
-All **62 automated tests pass**, covering plugin scope, npm/GitHub sources, compatibility, daily scheduling, settings persistence, recovery, enablement and page cleanup. Actual DSH components and Chrome were also used to check desktop and narrow layouts.
+All **65 automated tests pass**, covering plugin scope, npm/GitHub sources, compatibility, daily scheduling, settings persistence, recovery, enablement and page cleanup. Actual DSH components and Chrome were also used to check desktop and narrow layouts.
 
-The checker has been installed, enabled and used to discover updates in the official `0.2.1-rc.5` desktop app. The group action, sidebar indicator and automatic-check setting were verified. Real plugin replacement, activation after restart and recovery on restricted networks still require verification. See the [verification record](./docs/verification.md) (Chinese).
+The checker has been enabled and used to discover updates in the official `0.2.1-rc.5` and `0.2.2-rc.1` desktop apps. The group action, sidebar indicator and automatic-check setting were verified. Version `0.1.1` fixes the compatibility block after upgrading DSH and supports Cordis `4.1.0`. Real plugin replacement, activation after restart and recovery on restricted networks still require verification. See the [verification record](./docs/verification.md) (Chinese).
 
 `lib/` is generated from `src/` and `scripts/build.mjs`; do not edit it by hand. `npm test` checks build consistency before running tests.
 
@@ -115,11 +115,12 @@ To verify local DSH components and browser behavior:
 
 ```powershell
 node scripts/read-dsh-asar.mjs dsh-client-ui-plugin-manager dsh-client-ui-sidebar dsh-plugin-manager
+$env:DSH_SDK_VERSION = '0.2.2-rc.1'
 npm run verify:sdk
 npm run test:browser
 ```
 
-Set `DSH_ASAR` to a local app archive and `CHROME_PATH` to an installed Chromium browser when needed. These scripts use test pages and save their output in `work/`.
+Set `DSH_ASAR` to a local app archive. Extracted files are grouped by their actual DSH version. Use `DSH_SDK_VERSION` to select extracted components and `CHROME_PATH` to specify an installed Chromium browser. These scripts use test pages and save their output in `work/`.
 
 ## License
 
