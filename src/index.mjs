@@ -52,7 +52,7 @@ class PluginUpdater extends TypertRemoteService {
         const target = new URL(url);
         if (target.origin !== 'https://api.github.com' || target.username || target.password) throw new Error('无效的 GitHub 检查地址');
         const response = await fetch(target, { redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
-          headers: { Accept: 'application/vnd.github+json', 'User-Agent': `${PACKAGE}/0.1.1` } });
+          headers: { Accept: 'application/vnd.github+json', 'User-Agent': `${PACKAGE}/0.1.2` } });
         if (!response.ok) { await response.body?.cancel(); throw new Error(response.status === 403 || response.status === 429
           ? 'GitHub 检查达到限额，请稍后重试' : `GitHub 检查失败（${response.status}）`); }
         const reader = response.body.getReader(); const chunks = []; let size = 0;

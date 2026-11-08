@@ -44,3 +44,9 @@ npm 查询沿用当前 profile 的代理、认证、注册表与镜像顺序，�
 Host 的 `src/index.mjs` 注册 Typert RPC，`engine.mjs` 管理调度和更新任务；`sources.mjs`、`npm.mjs` 处理来源与版本，`store.mjs` 保存设置与结果。
 
 Client 的 `client.cjs` 使用官方详情页 slot。总览暂无对应的公开 slot，`dom.cjs` 依据现有 `data-plugin-group="bundles"` 和 `data-plugin-package` 标记增强该分组，退出时清理新增节点，保留原有启停开关。
+
+宿主同时提供 `updateBundle` 方法并将包标记为 `updatable` 时，详情页的版本更新按钮和“可更新”标签由宿主提供。归属在检查开始前即确定，异步检查完成后保持一致。旧宿主、GitHub 等其他来源保留更新器的详情操作。不兼容原因、版本说明、总览更新操作和每日提醒继续由更新器提供。
+
+| Capability | Canonical owner | Source of truth | Allowed variants | Verification |
+| --- | --- | --- | --- | --- |
+| Scrollbar | DSH 插件管理页 | 宿主主题与页面布局 | 总览、详情 | scripts/browser-check.mjs |

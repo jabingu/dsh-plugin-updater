@@ -36,6 +36,21 @@ function fixture(options = {}) {
 }
 async function update(f) { const p = (await f.engine.check()).plugins[0]; return f.engine.startUpdate({ name: p.name, version: p.targetVersion, token: p.token }); }
 
+test('native update ownership is known before checks and follows host eligibility', async () => {
+  const f = fixture();
+  const bundle = { name: 'dsh-example', version: '1.0.0', source: 'dsh-example@1.0.0',
+    installed: true, enabled: false, availability: 'profile', updatable: true };
+  f.manager.updateBundle = async () => {};
+  f.setBundles([bundle]);
+  assert.equal((await f.engine.snapshot()).plugins[0].nativeUpdates, true);
+  assert.equal((await f.engine.check()).plugins[0].nativeUpdates, true);
+  f.setBundles([{ ...bundle, source: 'github:owner/plugin', updatable: false }]);
+  assert.equal((await f.engine.snapshot()).plugins[0].nativeUpdates, false);
+  delete f.manager.updateBundle;
+  f.setBundles([bundle]);
+  assert.equal((await f.engine.snapshot()).plugins[0].nativeUpdates, false);
+});
+
 test('daily auto check, no background install and startup catch-up', async () => {
   const f = fixture(); await f.engine.tick(); assert.equal(f.checks, 1); assert.equal(f.calls.length, 0);
   await f.engine.tick(); assert.equal(f.checks, 1); f.advance(DAY); await f.engine.tick(); assert.equal(f.checks, 2);

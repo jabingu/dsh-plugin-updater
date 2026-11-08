@@ -62,13 +62,14 @@ function DetailContribution({ subject, store, kind }) {
   const plugin = snapshot.plugins.find(p => p.name === subject.pkg.name);
   if (!plugin) return null;
   const active = snapshot.job && ['validating', 'removing', 'installing', 'restoring'].includes(snapshot.job.phase);
-  if (kind === 'actions') return plugin.status === 'available' || plugin.status === 'updating'
+  if (kind === 'actions') return plugin.nativeUpdates !== true && (plugin.status === 'available' || plugin.status === 'updating')
     ? h('button', { type: 'button', className: 'dshpu-button dshpu-primary',
       disabled: snapshot.busy || !!snapshot.error || !!active || plugin.status !== 'available',
       onClick: () => store.update(plugin.name) }, plugin.status === 'updating' ? '正在更新…' : `更新到 ${plugin.targetVersion}`) : null;
   if (kind === 'badge') {
     const label = { available: '可更新', blocked: '暂不兼容' }[plugin.status];
-    return label ? h('span', { className: 'dshpu-badge' }, label) : null;
+    return label && !(plugin.status === 'available' && plugin.nativeUpdates === true)
+      ? h('span', { className: 'dshpu-badge' }, label) : null;
   }
   return h('section', { className: 'dshpu-section', 'data-dshpu-detail': plugin.name },
     h('h3', null, '插件更新'),

@@ -17,12 +17,13 @@ const h=React.createElement;const jsx=(type,props,key)=>h(type,key===undefined?p
 const prefix=${JSON.stringify(sdk.prefix)};const styles=new Proxy({},{get:(_,key)=>prefix+'_'+key});
 const Empty=()=>null;const Enable=({pkg,onSetEnabled})=>h('input',{type:'checkbox',role:'switch',className:'fixture-switch',checked:pkg.enabled,onChange:e=>onSetEnabled(e.target.checked),'aria-label':'启用 '+pkg.name});
 const nativeFactory=new Function('react','react_jsx_runtime','_deepseek_ai_dsh_client_ui_primitives','PluginManagerPage_module_css_default','packageText','packageStatus','PackageArtwork','EnableSwitch','MetadataError','updateAvailable',${JSON.stringify(inline(sdk.functions+'\nreturn {PackageCard};'))});
-const {PackageCard}=nativeFactory(React,{jsx,jsxs,Fragment:React.Fragment},{Tag:({children})=>h('span',null,children)},styles,p=>({title:p.title||p.name,description:p.description}),p=>p.enabled?'running':'disabled',()=>h('span',{className:'fixture-icon'}),Enable,Empty,()=>false);
+const {PackageCard}=nativeFactory(React,{jsx,jsxs,Fragment:React.Fragment},{Tag:({children,className})=>h('span',{className},children)},styles,p=>({title:p.title||p.name,description:p.description}),p=>p.enabled?'running':'disabled',()=>h('span',{className:'fixture-icon'}),Enable,Empty,()=>false);
+const nativeUpdates=${JSON.stringify(sdk.version === '0.2.2-rc.1')};
 const packages=[{name:'dsh-better-sidebar',title:'Better Sidebar',version:'0.25.0',enabled:false,description:'更好用的右侧边栏——文件树、编辑器、任务和侧边对话。'},{name:'dsh-reply-suggestions',title:'Reply Suggestions',version:'0.1.20',enabled:true,description:'根据上一轮对话，自动推荐下一句提问。'},{name:'dsh-selection-group',title:'Selection Toolbar',version:'1.6.5',enabled:true,description:'选中文字后，批注、引用或放入侧边对话。'}].map(p=>({...p,installed:true,official:false,availability:'profile',rows:[],removable:true}));
 let server={autoCheck:true,checking:false,error:null,plugins:[],lastAttemptAt:null,job:null};let opened=0;let updates=0;let checks=0;
 function snapshot(){
   server.plugins=packages.map((p,i)=>{
-    const installed={name:p.name,installedVersion:p.version,enabled:p.enabled};
+    const installed={name:p.name,installedVersion:p.version,enabled:p.enabled,nativeUpdates:nativeUpdates&&i===0};
     if(i!==0)return {...installed,status:'current'};
     if(server.job?.phase==='installing')return {...installed,status:'updating',targetVersion:'0.28.2'};
     if(p.version==='0.25.0')return {...installed,status:'available',targetVersion:'0.28.2',token:'11111111-1111-1111-1111-111111111111',notes:'优化大体积历史会话读取，降低启动时内存占用。'};
@@ -31,7 +32,7 @@ function snapshot(){
   return JSON.parse(JSON.stringify(server));
 }
 const reactRoot=ReactDOM.createRoot(document.getElementById('native-root'));
-function packageCard(p){return h(PackageCard,{key:p.name,pkg:p,t:k=>k,resolveText:x=>x,onOpen:()=>opened++,onSetEnabled:enabled=>{p.enabled=enabled;renderNative();}})}
+function packageCard(p){return h(PackageCard,{key:p.name,pkg:p,t:k=>k,resolveText:x=>x,newer:nativeUpdates&&p.name===packages[0].name&&p.version==='0.25.0'?'0.28.2':undefined,onOpen:()=>opened++,onSetEnabled:enabled=>{p.enabled=enabled;renderNative();}})}
 function group(id,title,rows){return h('section',{'data-plugin-group':id,'data-plugin-scope':'global',className:styles.group},h('div',{className:styles.groupHead},h('h3',{className:styles.groupTitle},title)),h('ul',{className:styles.cards},rows.map(packageCard)))}
 function renderNative(){ReactDOM.flushSync(()=>reactRoot.render(h(React.Fragment,null,h('aside',null,h('h2',null,'deepseek'),h('nav',null,h('button',{'aria-label':'插件'},'插件'))),h('main',{className:styles.page},h('h1',{className:'fixture-native-title'},'插件'),group('basic','内置插件配置',[{...packages[1],name:'builtin',title:'子智能体',official:true,availability:'installation'}]),group('extensions','实验性插件',[{...packages[1],name:'official',title:'开发者工具',official:true,availability:'installation'}]),group('bundles','已安装插件',packages)))))}renderNative();
 const remote={snapshot:async()=>({ok:true,value:snapshot()}),check:async()=>{checks++;await new Promise(r=>setTimeout(r,150));server.lastAttemptAt=new Date().toISOString();return {ok:true,value:snapshot()}},setSchedule:async input=>{server.autoCheck=input.autoCheck;return {ok:true,value:snapshot()}},startUpdate:async input=>{updates++;server.job={name:input.name,phase:'installing'};setTimeout(()=>{packages[0].version='0.28.2';server.job={name:input.name,phase:'complete'};renderNative()},300);return {ok:true,value:snapshot()}}};
@@ -48,6 +49,8 @@ try {
     await chrome.send('Page.navigate', { url: preview.href }); await delay(350);
     const metrics = await chrome.evaluate(`({width:innerWidth,scroll:document.documentElement.scrollWidth,actions:[...document.querySelectorAll('.dshpu-actions')].filter(e=>getComputedStyle(e).display!=='none').length,builtin:document.querySelector('[data-plugin-group="basic"] [data-dshpu-owned]')!==null,experimental:document.querySelector('[data-plugin-group="extensions"] [data-dshpu-owned]')!==null})`);
     assert.ok(metrics.scroll <= metrics.width, `overflow at ${width}`); assert.equal(metrics.actions, 1); assert.equal(metrics.builtin, false); assert.equal(metrics.experimental, false);
+    const badges = await chrome.evaluate(`[...document.querySelectorAll('[data-plugin-package="dsh-better-sidebar"] span')].filter(e=>(e.textContent==='statusUpdateAvailable'||e.classList.contains('dshpu-badge'))&&getComputedStyle(e).display!=='none').length`);
+    assert.equal(badges, 1, 'one visible update badge with native update support or the older host');
     if (width === 1100 || width === 375) { const shot = await chrome.send('Page.captureScreenshot', { format: 'png' }); await writeFile(new URL(`preview-${width}.png`, output), Buffer.from(shot.data, 'base64')); }
     console.log(`PASS: ${width}px actual DSH card layout and update scope`);
   }

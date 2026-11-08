@@ -54,6 +54,7 @@ export function createUpdater({ manager, inspector, store, runtimeVersion, hmr =
     const entry = {
       name: bundle.name, installedVersion: bundle.version ?? '', enabled: bundle.enabled === true,
       sourceKind: source.kind, status: 'unchecked', checkedAt: null,
+      nativeUpdates: typeof manager.updateBundle === 'function' && bundle.updatable === true,
     };
     if (valid) for (const field of ['status', 'checkedAt', 'latestVersion', 'targetVersion', 'reason', 'notes', 'url', 'token']) {
       if (record[field] !== undefined) entry[field] = record[field];

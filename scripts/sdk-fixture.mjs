@@ -18,5 +18,7 @@ export async function sdkFixture() {
   const css = JSON.parse(raw[1]);
   const prefix = css.match(/\.([\w-]+)_cardHead\{/)[1];
   return { version, client, sidebar, manager, css, prefix,
+    detailFunctions: ['rowRef', 'packageRef', 'DetailTop', 'PackageDetail', 'updateAvailable',
+      ...(version === '0.2.2-rc.1' ? ['versionUpdate', 'updateCandidate', 'installable'] : [])].map(declaration).join('\n'),
     functions: declaration('CardHead') + declaration('PackageCard') };
 }

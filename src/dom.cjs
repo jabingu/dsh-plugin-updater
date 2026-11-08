@@ -107,7 +107,8 @@ function createDomAdapter({ document, store, summaryText, badgeCount, versionTex
       const p = plugins.get(card.dataset.pluginPackage); if (!p) continue;
       const m = cards.get(card) ?? makeCard(card, p.name); if (!m) continue;
       const badgeLabel = { available: '可更新', blocked: '暂不兼容', error: '检查或更新失败', updating: '正在更新', 'restart-required': '待重启' }[p.status];
-      m.badge.hidden = !badgeLabel; setText(m.badge, badgeLabel);
+      m.badge.hidden = !badgeLabel || p.status === 'available' && p.nativeUpdates === true;
+      setText(m.badge, badgeLabel);
       setText(m.text, `${versionText(p)}${p.status === 'current' ? ' · 已是最新' : ''}${p.reason ? ` · ${p.reason}` : p.status === 'unchecked' ? ' · 尚未检查' : ''}`);
       m.update.hidden = !['available', 'updating'].includes(p.status);
       m.update.disabled = p.status !== 'available' || snapshot.busy || !!snapshot.error || !!snapshot.uiError || !!active;

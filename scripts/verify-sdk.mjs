@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { JSDOM } from 'jsdom';
 import React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { sdkFixture } from './sdk-fixture.mjs';
 import { summaryText, badgeCount, versionText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
+let client;
+runInNewContext(readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8'), {
+  window: { __ModuleLoader__: { load: definition => { client = definition.factory(require); } } },
+  AbortController, setTimeout, clearTimeout,
+});
 const sdk = await sdkFixture();
 for (const text of ['"data-plugin-package": pkg.name', 'renderGroup("bundles"', '"plugins.detail.actions"', '"plugins.detail.badge"', '"plugins.detail.section"']) assert.ok(sdk.client.includes(text), text);
 for (const method of ['listBundles()', 'installBundle(spec, options)', 'removeBundle(name)', 'async registries()']) assert.ok(sdk.manager.includes(method), method);
@@ -44,5 +52,60 @@ try {
   assert.equal(document.querySelectorAll('.dshpu-actions').length, 1);
   assert.equal(document.querySelectorAll('.dshpu-version').length, 1);
   stop(); assert.equal(document.querySelector('[data-dshpu-owned]'), null);
+  const PackageDetail = new Function('dependencies', `
+    const {react, react_jsx_runtime, _deepseek_ai_dsh_client_ui_primitives,
+      PluginManagerPage_module_css_default, packageText, packageStatus, PackageArtwork,
+      EnableSwitch, MetadataError, RowsSection, VersionSection, SourceSection, PackagePreview,
+      managementText, BUNDLE_PREVIEWS} = dependencies;
+    ${sdk.detailFunctions}
+    return PackageDetail;
+  `)({
+    react: React, react_jsx_runtime: jsxRuntime,
+    _deepseek_ai_dsh_client_ui_primitives: {
+      Button: ({ children, icon, variant, size, ...props }) => React.createElement('button', props, children),
+      Tag: ({ children, className }) => React.createElement('span', { className }, children),
+      IconChevronDownOutlineRegular: Empty, IconRefreshOutlineRegular: Empty, IconTrashOutlineRegular: Empty,
+    },
+    PluginManagerPage_module_css_default: styles,
+    packageText: p => ({ title: p.name, description: p.description }),
+    packageStatus: () => 'running', PackageArtwork: Empty, EnableSwitch: Enable,
+    MetadataError: Empty, RowsSection: Empty, VersionSection: Empty, SourceSection: Empty,
+    PackagePreview: Empty, managementText: () => '', BUNDLE_PREVIEWS: new Map(),
+  });
+  const nativeUpdates = sdk.version === '0.2.2-rc.1';
+  let nativeCalls = 0;
+  const available = { ...current.plugins[0], nativeUpdates };
+  function renderDetail(nativeReady) {
+    flushSync(() => root.render(React.createElement(PackageDetail, {
+      pkg: packageInfo, t: (key, values) => key === 'versionsUpdateLabel' ? `Update to ${values.version}` : key,
+      resolveText: x => x, busy: false, configured: false,
+      versions: nativeReady ? { phase: 'done', list: { status: 'listed', versions: [{ version: '1.1.0', bundle: true }] } } : undefined,
+      onUpdateVersion: () => { nativeCalls++; },
+      renderSlot: (name, props) => React.createElement(client.DetailContribution, {
+        ...props, store, kind: name.split('.').at(-1),
+      }),
+    })));
+  }
+  const updateButtons = () => [...document.querySelectorAll(`.${sdk.prefix}_detailActions button`)]
+    .filter(button => /^(Update to |更新到 )/.test(button.textContent));
+  for (const nativeFirst of [true, false]) {
+    current = { ...current, plugins: [{ ...available, status: nativeFirst ? 'unchecked' : 'available' }] };
+    renderDetail(nativeUpdates && nativeFirst);
+    assert.equal(updateButtons().length, nativeUpdates ? Number(nativeFirst) : Number(!nativeFirst));
+    current = { ...current, plugins: [available] };
+    flushSync(() => { for (const listener of listeners) listener(); });
+    renderDetail(nativeUpdates);
+    assert.equal(updateButtons().length, 1, 'detail shows exactly one update action after either check order');
+    if (nativeUpdates) {
+      assert.equal(document.querySelector('.dshpu-primary'), null);
+      assert.equal(document.querySelector('.dshpu-badge'), null);
+      updateButtons()[0].click();
+    }
+  }
+  assert.equal(nativeCalls, nativeUpdates ? 2 : 0);
+  current = { ...current, plugins: [{ ...available, nativeUpdates: false, sourceKind: 'github' }] };
+  renderDetail(false);
+  assert.equal(updateButtons().length, 1, 'GitHub updates retain their contributed action');
   console.log(`PASS: actual DSH ${sdk.version} PackageCard, React reconciliation, detail slots and manager API contract.`);
+  console.log('PASS: actual PackageDetail, both check orders, single update action and GitHub fallback.');
 } finally { root.unmount(); globalThis.window = previous.window; globalThis.document = previous.document; dom.window.close(); }

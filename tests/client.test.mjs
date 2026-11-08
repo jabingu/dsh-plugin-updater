@@ -107,6 +107,26 @@ test('current plugins hide the action visually, not just through the hidden prop
   assert.equal(f.dom.window.getComputedStyle(f.document.querySelector('.dshpu-actions')).display, 'none');
   f.stop(); f.dom.window.close();
 });
+test('native-managed packages keep one detail action owner after delayed checks', async () => {
+  const f = setup();
+  const subject = { kind: 'bundle', pkg: { name: plugin.name, installed: true } };
+  const render = kind => renderToStaticMarkup(React.createElement(client.DetailContribution, { subject, store: f.store, kind }));
+  for (const status of ['unchecked', 'available', 'updating']) {
+    f.set(snapshot({ plugins: [{ ...plugin, nativeUpdates: true, status }] })); await wait(5);
+    assert.equal(render('actions'), '');
+    assert.equal(f.document.querySelector('.dshpu-badge').hidden, status === 'unchecked' || status === 'available');
+  }
+  f.set(snapshot({ plugins: [{ ...plugin, nativeUpdates: true, status: 'available' }] })); await wait(5);
+  assert.equal(render('badge'), '');
+  assert.match(render('section'), /1\.0\.0 → 1\.1\.0/);
+  assert.equal(f.document.querySelector('.dshpu-primary').hidden, false);
+  f.set(snapshot({ plugins: [{ ...blocked, nativeUpdates: true }] })); await wait(5);
+  assert.match(render('badge'), /暂不兼容/);
+  assert.equal(f.document.querySelector('.dshpu-badge').hidden, false);
+  f.set(snapshot({ plugins: [{ ...plugin, sourceKind: 'github', nativeUpdates: false }] })); await wait(5);
+  assert.match(render('actions'), /更新到 1\.1\.0/);
+  f.stop(); f.dom.window.close();
+});
 test('detail contributions reject official and not-installed subjects', () => {
   const store = { getSnapshot: () => snapshot(), subscribe: () => () => {} };
   for (const pkg of [{ name: plugin.name, installed: true, official: true }, { name: plugin.name, installed: false }]) {
