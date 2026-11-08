@@ -8,7 +8,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { sdkFixture } from './sdk-fixture.mjs';
-import { summaryText, badgeCount, versionText } from '../src/common.mjs';
+import { summaryText, badgeCount, versionText, updateActive, updateProgressText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
 let client;
@@ -18,7 +18,8 @@ runInNewContext(readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8
 });
 const sdk = await sdkFixture();
 for (const text of ['"data-plugin-package": pkg.name', 'renderGroup("bundles"', '"plugins.detail.actions"', '"plugins.detail.badge"', '"plugins.detail.section"']) assert.ok(sdk.client.includes(text), text);
-for (const method of ['listBundles()', 'installBundle(spec, options)', 'removeBundle(name)', 'async registries()']) assert.ok(sdk.manager.includes(method), method);
+for (const method of ['listBundles()', 'installBundle(spec, options)', 'removeBundle(name)', 'async registries()', 'async cancelInstall(requestId)']) assert.ok(sdk.manager.includes(method), method);
+if (sdk.version === '0.2.2-rc.1') assert.ok(sdk.manager.includes('async updateBundle(name, version, options)'));
 assert.ok(sdk.sidebar.includes('"aria-label": label') && sdk.sidebar.includes('"nav"'));
 const dom = new JSDOM('<html><head></head><body><div id="root"></div></body></html>');
 const previous = { window: globalThis.window, document: globalThis.document };
@@ -44,7 +45,7 @@ function render(enabled) {
 }
 try {
   render(false); await new Promise(r => setTimeout(r, 25));
-  const stop = createDomAdapter({ document, store, summaryText, badgeCount, versionText });
+  const stop = createDomAdapter({ document, store, summaryText, badgeCount, versionText, updateActive, updateProgressText });
   assert.equal(document.querySelectorAll('.dshpu-actions').length, 1);
   assert.equal(document.querySelector('input[role="switch"]').checked, false);
   render(true); await new Promise(r => setTimeout(r, 25));

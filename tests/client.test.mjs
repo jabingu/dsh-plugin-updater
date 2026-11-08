@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { JSDOM } from 'jsdom';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { summaryText, badgeCount, versionText } from '../src/common.mjs';
+import { summaryText, badgeCount, versionText, updateActive, updateProgressText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,9 +31,10 @@ function setup() {
     <section data-plugin-scope="global" data-plugin-group="bundles"><div><h3>已安装插件</h3></div><ul>${card('dsh-example')}</ul></section></main></body></html>`);
   let current = snapshot(); const listeners = new Set(); const calls = [];
   const store = { getSnapshot: () => current, subscribe: f => { listeners.add(f); return () => listeners.delete(f); },
-    check: async () => calls.push(['check']), setSchedule: async v => calls.push(['schedule', v]), update: async name => calls.push(['update', name]) };
+    check: async () => calls.push(['check']), setSchedule: async v => calls.push(['schedule', v]), update: async name => calls.push(['update', name]),
+    stopUpdate: async () => calls.push(['stop']) };
   const before = dom.window.document.body.innerHTML;
-  const stop = createDomAdapter({ document: dom.window.document, store, summaryText, badgeCount, versionText, sidebarLabel: () => '插件' });
+  const stop = createDomAdapter({ document: dom.window.document, store, summaryText, badgeCount, versionText, updateActive, updateProgressText, sidebarLabel: () => '插件' });
   return { dom, document: dom.window.document, store, calls, before, stop,
     set(next) { current = next; for (const f of listeners) f(); } };
 }
@@ -134,6 +135,25 @@ test('detail contributions reject official and not-installed subjects', () => {
   }
   assert.match(renderToStaticMarkup(React.createElement(client.DetailContribution, { subject: { kind: 'bundle', pkg: { name: plugin.name, installed: true, official: false } }, store, kind: 'actions' })), /更新到 1.1.0/);
 });
+test('stop controls remain reachable while the package row is temporarily removed', async () => {
+  const f = setup();
+  const job = { id: 'a'.repeat(36), name: plugin.name, phase: 'installing', canStop: true };
+  f.set(snapshot({ plugins: [{ ...plugin, status: 'updating' }], job })); await wait(5);
+  const rowStop = [...f.document.querySelectorAll('.dshpu-actions button')].find(b => b.textContent === '停止更新');
+  assert.equal(rowStop.hidden, false); rowStop.click(); await wait(5);
+  assert.deepEqual(f.calls, [['stop']]);
+  const subject = { kind: 'bundle', pkg: { name: plugin.name, installed: true } };
+  assert.match(renderToStaticMarkup(React.createElement(client.DetailContribution, { subject, store: f.store, kind: 'actions' })), /停止更新/);
+  f.document.querySelector('[data-plugin-package="dsh-example"]').remove();
+  f.set(snapshot({ plugins: [], job: { ...job, phase: 'removing' } })); await wait(5);
+  const groupStop = [...f.document.querySelectorAll('.dshpu-controls button')].find(b => b.textContent === '停止更新');
+  assert.equal(groupStop.hidden, false); groupStop.click(); await wait(5);
+  assert.deepEqual(f.calls, [['stop'], ['stop']]);
+  f.set(snapshot({ plugins: [], job: { ...job, phase: 'restoring', canStop: false } })); await wait(5);
+  assert.equal(groupStop.disabled, true); assert.equal(groupStop.textContent, '恢复中…');
+  assert.match(f.document.querySelector('.dshpu-summary').textContent, /恢复原版本/);
+  f.stop(); f.dom.window.close();
+});
 test('late snapshot response cannot overwrite a newer manual check', async () => {
   let release; const initial = new Promise(resolve => { release = resolve; });
   const remote = { snapshot: () => initial, check: async () => ({ ok: true, value: snapshot({ plugins: [{ ...plugin, targetVersion: '1.2.0' }] }) }) };
@@ -147,4 +167,14 @@ test('client sends only a verified package identity and token when Update is cli
   const store = client.createClientStore(remote, globalThis); await wait(5); await store.update(plugin.name);
   assert.equal(request.name, plugin.name); assert.equal(request.version, plugin.targetVersion); assert.equal(request.token, plugin.token);
   assert.equal('spec' in request, false); store.stop();
+});
+test('client stops only the displayed job and refreshes its cancellation state', async () => {
+  const id = '1'.repeat(36); let requested;
+  const running = snapshot({ plugins: [{ ...plugin, status: 'updating' }], job: { id, name: plugin.name, phase: 'installing', canStop: true } });
+  const remote = { snapshot: async () => ({ ok: true, value: running }),
+    stopUpdate: async input => { requested = input; return { ok: true, value: { ...running, job: { ...running.job, cancelPending: true, canStop: false } } }; } };
+  const store = client.createClientStore(remote, globalThis); await wait(5); await store.stopUpdate();
+  assert.deepEqual({ ...requested }, { id });
+  assert.equal(store.getSnapshot().job.cancelPending, true);
+  assert.equal(store.getSnapshot().busy, false); store.stop();
 });

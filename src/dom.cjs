@@ -12,7 +12,8 @@ const CSS = `
 .dshpu-badge,.dshpu-nav-badge{font-size:11px;line-height:18px;color:var(--dsw-alias-state-business-primary,LinkText);background:color-mix(in srgb,currentColor 10%,transparent);border-radius:5px;padding:0 6px;white-space:nowrap}
 .dshpu-version{position:relative;z-index:2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .dshpu-link{font:inherit;background:none;padding:0;border:0;color:var(--dsw-alias-state-business-primary,LinkText);cursor:pointer;position:relative;z-index:2}
-.dshpu-actions{position:relative;z-index:2;display:inline-flex;align-items:center;margin-inline-end:8px;flex:none}
+.dshpu-actions{position:relative;z-index:2;display:inline-flex;align-items:center;gap:6px;margin-inline-end:8px;flex:none}
+.dshpu-controls{display:flex;gap:8px;align-items:center}
 [data-dshpu-nav]{position:relative}.dshpu-nav-badge{margin-inline-start:auto;flex:none;min-width:18px;text-align:center}
 [data-sidebar-collapsed=true] .dshpu-nav-badge{position:absolute;inset-inline-end:0;top:0;line-height:15px;font-size:10px;min-width:15px;padding:0 3px}
 .dshpu-notes{color:var(--dsw-alias-label-secondary,CanvasText);font-size:12px;line-height:20px;white-space:pre-wrap;max-height:220px;overflow:auto;overflow-wrap:anywhere;background:var(--dsw-alias-bg-layer-1,Canvas);border:1px solid var(--dsw-alias-border-l3,ButtonBorder);border-radius:8px;padding:12px;margin:4px 8px 12px}
@@ -21,7 +22,7 @@ const CSS = `
 [data-dshpu-owned][hidden]{display:none!important}
 `;
 
-function createDomAdapter({ document, store, summaryText, badgeCount, versionText, sidebarLabel = () => null }) {
+function createDomAdapter({ document, store, summaryText, badgeCount, versionText, updateActive, updateProgressText, sidebarLabel = () => null }) {
   let disposed = false;
   let scheduled = null;
   let groupMount = null;
@@ -53,13 +54,15 @@ function createDomAdapter({ document, store, summaryText, badgeCount, versionTex
   function makeGroup(group) {
     const heading = group.querySelector(':scope > div:has(h3)');
     if (!heading) return null;
-    const check = button('检查更新', () => store.check()); heading.append(check);
+    const controls = element('div', 'dshpu-controls');
+    const check = button('检查更新', () => store.check());
+    const stop = button('停止更新', () => store.stopUpdate()); controls.append(check, stop); heading.append(controls);
     const summary = element('div', 'dshpu-summary'); const line = element('span', ''); line.setAttribute('role', 'status'); line.setAttribute('aria-live', 'polite');
     const timestamp = element('span', ''); summary.append(line, timestamp); heading.after(summary);
     const footer = element('div', 'dshpu-footer'); const label = element('label', ''); const auto = element('input', ''); auto.type = 'checkbox';
     auto.addEventListener('change', () => { store.setSchedule({ autoCheck: auto.checked }).catch(() => {}); });
     label.append(auto, document.createTextNode('自动检查更新')); const hint = element('span', '', '每天检查，仅提醒'); footer.append(label, hint); group.append(footer);
-    return { group, check, summary, line, timestamp, footer, auto, hint };
+    return { group, controls, check, stop, summary, line, timestamp, footer, auto, hint };
   }
   function makeCard(card, name) {
     const head = card.firstElementChild;
@@ -75,27 +78,32 @@ function createDomAdapter({ document, store, summaryText, badgeCount, versionTex
     showNotes.addEventListener('click', event => { event.stopPropagation(); event.preventDefault(); notes.hidden = !notes.hidden; showNotes.setAttribute('aria-expanded', String(!notes.hidden)); });
     version.append(text, showNotes);
     const action = element('span', 'dshpu-actions'); const update = button('更新', () => store.update(name), true);
+    const stop = button('停止更新', () => store.stopUpdate());
     const release = element('a', 'dshpu-button', '查看新版');
     release.target = '_blank'; release.rel = 'noreferrer';
     release.addEventListener('click', event => event.stopPropagation());
-    action.append(update, release); end.prepend(action);
-    const mounted = { main, badge, version, text, showNotes, notes, action, update, release }; cards.set(card, mounted); return mounted;
+    action.append(update, stop, release); end.prepend(action);
+    const mounted = { main, badge, version, text, showNotes, notes, action, update, stop, release }; cards.set(card, mounted); return mounted;
   }
   function sync() {
     if (disposed) return;
     if (!style.isConnected) document.head.append(style);
     const snapshot = store.getSnapshot();
-    const active = snapshot.job && ['validating', 'removing', 'installing', 'restoring'].includes(snapshot.job.phase);
+    const active = updateActive(snapshot.job);
     const plugins = new Map(snapshot.plugins.map(p => [p.name, p]));
     const group = document.querySelector('[data-plugin-scope="global"][data-plugin-group="bundles"]');
     if (groupMount && (groupMount.group !== group || !groupMount.check.isConnected || !groupMount.footer.isConnected)) {
-      for (const node of [groupMount.check, groupMount.summary, groupMount.footer]) removeOwned(node); groupMount = null;
+      for (const node of [groupMount.controls, groupMount.summary, groupMount.footer]) removeOwned(node); groupMount = null;
     }
     if (group && !groupMount) groupMount = makeGroup(group);
     if (groupMount) {
       const m = groupMount;
       m.check.disabled = snapshot.checking || !!active || snapshot.busy;
       setText(m.check, snapshot.checking ? '正在检查…' : '检查更新');
+      m.stop.hidden = !active;
+      m.stop.disabled = snapshot.busy || !snapshot.job?.canStop;
+      setText(m.stop, snapshot.job?.phase === 'restoring' ? '恢复中…' : snapshot.job?.cancelPending ? '正在停止…' : '停止更新');
+      m.stop.title = active ? updateProgressText(snapshot.job) : '';
       setText(m.line, snapshot.uiError ?? summaryText(snapshot));
       const timestamp = snapshot.lastAttemptAt && new Date(snapshot.lastAttemptAt);
       setText(m.timestamp, timestamp && Number.isFinite(timestamp.getTime()) ? `上次检查：${timestamp.toLocaleString()}` : '尚未检查');
@@ -106,6 +114,7 @@ function createDomAdapter({ document, store, summaryText, badgeCount, versionTex
     if (group) for (const card of group.querySelectorAll('[data-plugin-package]')) {
       const p = plugins.get(card.dataset.pluginPackage); if (!p) continue;
       const m = cards.get(card) ?? makeCard(card, p.name); if (!m) continue;
+      const ownJob = active && snapshot.job.name === p.name;
       const badgeLabel = { available: '可更新', blocked: '暂不兼容', error: '检查或更新失败', updating: '正在更新', 'restart-required': '待重启' }[p.status];
       m.badge.hidden = !badgeLabel || p.status === 'available' && p.nativeUpdates === true;
       setText(m.badge, badgeLabel);
@@ -113,10 +122,14 @@ function createDomAdapter({ document, store, summaryText, badgeCount, versionTex
       m.update.hidden = !['available', 'updating'].includes(p.status);
       m.update.disabled = p.status !== 'available' || snapshot.busy || !!snapshot.error || !!snapshot.uiError || !!active;
       setText(m.update, p.status === 'updating' ? '正在更新…' : '更新');
+      m.stop.hidden = !ownJob;
+      m.stop.disabled = snapshot.busy || !snapshot.job?.canStop;
+      setText(m.stop, snapshot.job?.phase === 'restoring' ? '恢复中…' : snapshot.job?.cancelPending ? '正在停止…' : '停止更新');
+      m.stop.title = ownJob ? updateProgressText(snapshot.job) : '';
       m.release.hidden = p.status !== 'blocked' || !p.url?.startsWith('https://');
       if (m.release.hidden) m.release.removeAttribute('href');
       else m.release.href = p.url;
-      m.action.hidden = m.update.hidden && m.release.hidden;
+      m.action.hidden = m.update.hidden && m.release.hidden && m.stop.hidden;
       m.showNotes.hidden = !p.notes;
       setText(m.notes, `${p.targetVersion ?? p.latestVersion ?? ''} 更新信息\n${p.notes ?? ''}`);
     }

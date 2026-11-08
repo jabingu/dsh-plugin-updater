@@ -1,5 +1,5 @@
 const { createElement: h, useSyncExternalStore } = require('react');
-const { PACKAGE, descriptors, summaryText, badgeCount, versionText } = require('./common.mjs');
+const { PACKAGE, descriptors, summaryText, badgeCount, versionText, updateActive, updateProgressText } = require('./common.mjs');
 const { createDomAdapter } = require('./dom.cjs');
 
 function createClientStore(remote, window) {
@@ -21,7 +21,7 @@ function createClientStore(remote, window) {
   function arm() {
     if (stopped) return;
     window.clearTimeout(timer);
-    const active = value.checking || value.job && ['validating', 'removing', 'installing', 'restoring'].includes(value.job.phase);
+    const active = value.checking || updateActive(value.job);
     timer = window.setTimeout(() => { refresh().finally(arm); }, active ? 1000 : 15000);
   }
   async function refresh() {
@@ -50,6 +50,10 @@ function createClientStore(remote, window) {
       if (p?.status !== 'available' || !p.token || value.error) return Promise.resolve();
       return action('startUpdate', { name, version: p.targetVersion, token: p.token });
     },
+    stopUpdate() {
+      if (!value.job?.canStop) return Promise.resolve();
+      return action('stopUpdate', { id: value.job.id });
+    },
     stop() { stopped = true; controller.abort(); window.clearTimeout(timer); listeners.clear(); },
   };
   refresh().finally(arm);
@@ -61,11 +65,18 @@ function DetailContribution({ subject, store, kind }) {
   if (subject?.kind !== 'bundle' || !subject.pkg?.installed || subject.pkg.official || subject.pkg.availability === 'installation') return null;
   const plugin = snapshot.plugins.find(p => p.name === subject.pkg.name);
   if (!plugin) return null;
-  const active = snapshot.job && ['validating', 'removing', 'installing', 'restoring'].includes(snapshot.job.phase);
-  if (kind === 'actions') return plugin.nativeUpdates !== true && (plugin.status === 'available' || plugin.status === 'updating')
-    ? h('button', { type: 'button', className: 'dshpu-button dshpu-primary',
-      disabled: snapshot.busy || !!snapshot.error || !!active || plugin.status !== 'available',
-      onClick: () => store.update(plugin.name) }, plugin.status === 'updating' ? '正在更新…' : `更新到 ${plugin.targetVersion}`) : null;
+  const active = updateActive(snapshot.job);
+  const ownJob = active && snapshot.job.name === plugin.name;
+  if (kind === 'actions') {
+    if (ownJob) return h('button', { type: 'button', className: 'dshpu-button',
+      disabled: snapshot.busy || !snapshot.job.canStop, onClick: () => store.stopUpdate(),
+      title: updateProgressText(snapshot.job) },
+    snapshot.job.phase === 'restoring' ? '恢复中…' : snapshot.job.cancelPending ? '正在停止…' : '停止更新');
+    return plugin.nativeUpdates !== true && plugin.status === 'available'
+      ? h('button', { type: 'button', className: 'dshpu-button dshpu-primary',
+        disabled: snapshot.busy || !!snapshot.error || active,
+        onClick: () => store.update(plugin.name) }, `更新到 ${plugin.targetVersion}`) : null;
+  }
   if (kind === 'badge') {
     const label = { available: '可更新', blocked: '暂不兼容' }[plugin.status];
     return label && !(plugin.status === 'available' && plugin.nativeUpdates === true)
@@ -90,7 +101,7 @@ exports.apply = async function apply(ctx) {
     const remote = scope.get('remote.pluginUpdater');
     scope.effect(() => {
       const store = createClientStore(remote, window);
-      const disposeDom = createDomAdapter({ document, store, summaryText, badgeCount, versionText,
+      const disposeDom = createDomAdapter({ document, store, summaryText, badgeCount, versionText, updateActive, updateProgressText,
         sidebarLabel: () => {
           const entry = scope.slots.entries('sidebar.panellist').find(e => e.options.id === 'plugins');
           const label = entry?.options.label;

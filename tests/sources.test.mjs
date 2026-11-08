@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import semver from 'semver';
 import { userBundles, sourceOf, compatibilityReason, chooseCandidate, registryPlan, createInspector } from '../src/sources.mjs';
-import { validateUpdate, validateSchedule, descriptors, summaryText } from '../src/common.mjs';
+import { validateUpdate, validateSchedule, validateStopUpdate, descriptors, summaryText } from '../src/common.mjs';
 
 const bundle = { name: 'dsh-example', version: '0.25.0', installed: true, official: false, enabled: false,
   availability: 'profile', source: 'dsh-example@^0.25.0' };
@@ -111,7 +111,8 @@ test('local source is reported without any network request', async () => {
 test('wire input rejects specs, unsafe names, extra fields and forged tokens', () => {
   assert.throws(() => validateUpdate({ name: '--help', version: '1.0.0', token: 'abc' }));
   assert.throws(() => validateSchedule({ autoCheck: true, installAutomatically: true }));
-  assert.equal(descriptors().length, 4);
+  assert.throws(() => validateStopUpdate({ id: 'invalid', name: bundle.name }));
+  assert.equal(descriptors().length, 5);
 });
 test('summary does not call a failed or unsupported check up to date', () => {
   assert.match(summaryText({ plugins: [{ status: 'error' }], checking: false }), /失败/);

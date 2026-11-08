@@ -11,8 +11,8 @@ function fixture(options = {}) {
     enabled: options.enabled ?? false, official: false, availability: 'profile' }];
   const calls = []; let checks = 0;
   const store = { load: async () => structuredClone(disk), save: async value => { if (options.failSave) throw new Error('storage denied'); disk = structuredClone(value); } };
-  const inspector = async bundle => {
-    checks++; if (options.inspect) return options.inspect(bundle);
+  const inspector = async (bundle, signal) => {
+    checks++; if (options.inspect) return options.inspect(bundle, signal);
     return { status: 'available', sourceKind: 'npm', latestVersion: '1.1.0', candidate: {
       manifest: { name: bundle.name, version: '1.1.0' }, spec: `${bundle.name}@1.1.0`, registry: null, notes: 'changes',
     } };
@@ -30,11 +30,157 @@ function fixture(options = {}) {
     },
   };
   const engine = createUpdater({ manager, inspector, store, runtimeVersion: '0.2.1-rc.5',
-    now: () => clock, hmr: options.hmr !== false, rollbackSource: options.rollbackSource });
+    now: () => clock, hmr: options.hmr !== false, rollbackSource: options.rollbackSource,
+    cancelWaitMs: options.cancelWaitMs ?? 15000 });
   return { engine, manager, calls, get checks() { return checks; }, get disk() { return disk; },
     setBundles: v => { bundles = v; }, advance: ms => { clock += ms; } };
 }
 async function update(f) { const p = (await f.engine.check()).plugins[0]; return f.engine.startUpdate({ name: p.name, version: p.targetVersion, token: p.token }); }
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+const nativeBundle = { name: 'dsh-example', version: '1.0.0', source: 'dsh-example@1.0.0',
+  installed: true, enabled: false, availability: 'profile', updatable: true };
+
+test('eligible overview updates call the native updater exactly once', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]);
+  let request;
+  f.manager.updateBundle = async (name, version, options) => {
+    request = { name, version, options };
+    f.setBundles([{ ...nativeBundle, version, source: name + '@' + version }]);
+    return { from: '1.0.0', to: version, step: 'install', result: { application: 'applied' } };
+  };
+  await update(f); const result = await f.engine.waitForIdle();
+  assert.equal(request.name, nativeBundle.name); assert.equal(request.version, '1.1.0');
+  assert.equal(request.options.requestId, result.job.id);
+  assert.equal(result.job.phase, 'complete');
+  assert.deepEqual(f.calls, [], 'the wrapper must not remove or reinstall around the native update');
+});
+test('native update failure uses the host restoration result without a second rollback', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]);
+  f.manager.updateBundle = async () => ({ step: 'install', result: { application: 'failed' }, restore: { application: 'applied' } });
+  await update(f); const result = await f.engine.waitForIdle();
+  assert.equal(result.job.phase, 'failed'); assert.match(result.job.error, /保留或恢复/);
+  assert.deepEqual(f.calls, []);
+});
+test('stopping a native install waits for the host to restore the previous version', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]);
+  const started = deferred(); const outcome = deferred(); const restore = deferred();
+  f.manager.updateBundle = async (name, version, { requestId }) => {
+    f.engine.nativeProgress({ requestId, step: 'installing' }); started.resolve(requestId);
+    await outcome.promise;
+    f.engine.nativeProgress({ requestId, step: 'restoring' });
+    await restore.promise;
+    return { step: 'install', result: { application: 'cancelled' }, restore: { application: 'applied' } };
+  };
+  let cancelledId;
+  f.manager.cancelInstall = async id => { cancelledId = id; outcome.resolve(); return { status: 'cancelled' }; };
+  await update(f); const id = await started.promise;
+  await assert.rejects(f.engine.stopUpdate({ id: 'b'.repeat(36) }), /已结束/);
+  await f.engine.stopUpdate({ id }); await new Promise(r => setTimeout(r, 5));
+  const pending = await f.engine.snapshot();
+  assert.equal(pending.job.phase, 'restoring'); assert.equal(pending.job.canStop, false);
+  await assert.rejects(f.engine.stopUpdate({ id }), /恢复/);
+  restore.resolve(); const result = await f.engine.waitForIdle();
+  assert.equal(cancelledId, id); assert.equal(result.job.phase, 'cancelled');
+  assert.equal(result.plugins[0].installedVersion, '1.0.0'); assert.equal(result.plugins[0].enabled, false);
+  assert.deepEqual(f.calls, []);
+});
+test('a stop requested before native installation is registered is retried with the same id', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]);
+  const started = deferred(); const finished = deferred(); let attempts = 0;
+  f.manager.updateBundle = async (name, version, { requestId }) => {
+    started.resolve(requestId); await finished.promise;
+    return { step: 'install', result: { application: 'cancelled' } };
+  };
+  f.manager.cancelInstall = async () => {
+    attempts++;
+    if (attempts === 1) return { status: 'not-running' };
+    finished.resolve(); return { status: 'cancelled' };
+  };
+  await update(f); const id = await started.promise; await f.engine.stopUpdate({ id });
+  assert.equal((await f.engine.snapshot()).job.cancelRequested, true);
+  const result = await f.engine.waitForIdle();
+  assert.equal(attempts, 2); assert.equal(result.job.phase, 'cancelled');
+});
+test('too-late cancellation reports the application phase and accepts a completed native update', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]); const started = deferred(); const finished = deferred();
+  f.manager.updateBundle = async (name, version, { requestId }) => {
+    started.resolve(requestId); await finished.promise;
+    f.setBundles([{ ...nativeBundle, version, source: name + '@' + version }]);
+    return { step: 'install', result: { application: 'applied' } };
+  };
+  f.manager.cancelInstall = async () => ({ status: 'too-late' });
+  await update(f); await f.engine.stopUpdate({ id: await started.promise });
+  const pending = await f.engine.snapshot();
+  assert.equal(pending.job.canStop, false); assert.equal(pending.job.cancelUnavailable, true);
+  finished.resolve(); assert.equal((await f.engine.waitForIdle()).job.phase, 'complete');
+});
+test('an unconfirmed stop remains active after its response timeout and can be retried', async () => {
+  const f = fixture({ cancelWaitMs: 10 }); f.setBundles([nativeBundle]);
+  const started = deferred(); const finished = deferred(); const confirmation = deferred();
+  f.manager.updateBundle = async (name, version, { requestId }) => {
+    started.resolve(requestId); await finished.promise;
+    return { step: 'install', result: { application: 'cancelled' } };
+  };
+  f.manager.cancelInstall = () => confirmation.promise;
+  await update(f); const id = await started.promise;
+  await f.engine.stopUpdate({ id }); await new Promise(r => setTimeout(r, 25));
+  const pending = await f.engine.snapshot();
+  assert.equal(pending.job.phase, 'validating'); assert.equal(pending.job.canStop, true);
+  assert.match(pending.job.cancelError, /尚未确认/);
+  const cached = f.disk.results[nativeBundle.name];
+  await assert.rejects(f.engine.startUpdate({ name: nativeBundle.name, version: cached.targetVersion, token: cached.token }), /正在更新/);
+  await f.engine.stopUpdate({ id }); confirmation.resolve({ status: 'cancelled' }); finished.resolve();
+  assert.equal((await f.engine.waitForIdle()).job.phase, 'cancelled');
+});
+test('failed native restoration is an error even after the stop was accepted', async () => {
+  const f = fixture(); f.setBundles([nativeBundle]);
+  f.manager.updateBundle = async () => {
+    f.setBundles([]);
+    return { step: 'install', result: { application: 'cancelled' }, restore: { application: 'failed' } };
+  };
+  await update(f); const result = await f.engine.waitForIdle();
+  assert.equal(result.job.phase, 'failed'); assert.match(result.job.error, /恢复失败/);
+  assert.deepEqual(f.calls, []);
+});
+test('cancelling validation ends the task even when a read-only inspector ignores the signal', async () => {
+  const options = {}; const f = fixture(options); const [target] = (await f.engine.check()).plugins;
+  const started = deferred();
+  options.inspect = () => { started.resolve(); return new Promise(() => {}); };
+  await f.engine.startUpdate({ name: target.name, version: target.targetVersion, token: target.token });
+  await started.promise;
+  await f.engine.stopUpdate({ id: (await f.engine.snapshot()).job.id });
+  assert.equal((await f.engine.waitForIdle()).job.phase, 'cancelled');
+  assert.deepEqual(f.calls, []);
+});
+test('legacy cancellation during removal restores the original without installing the target', async () => {
+  const started = deferred(); const finishRemoval = deferred();
+  const f = fixture({ remove: async ({ set }) => {
+    started.resolve(); await finishRemoval.promise; set([]); return { application: 'applied' };
+  } });
+  await update(f); await started.promise;
+  await f.engine.stopUpdate({ id: (await f.engine.snapshot()).job.id }); finishRemoval.resolve();
+  const result = await f.engine.waitForIdle();
+  assert.equal(result.job.phase, 'cancelled'); assert.equal(result.plugins[0].installedVersion, '1.0.0');
+  assert.deepEqual(f.calls.filter(c => c[0] === 'install').map(c => c[1]), ['dsh-example@1.0.0']);
+});
+test('legacy installation cancellation restores the removed version and keeps recovery protected', async () => {
+  const started = deferred(); const cancel = deferred(); const restoring = deferred(); const restored = deferred();
+  const f = fixture({ install: async spec => {
+    if (spec.endsWith('@1.1.0')) { started.resolve(); await cancel.promise; return { application: 'cancelled' }; }
+    restoring.resolve(); await restored.promise; return null;
+  } });
+  f.manager.cancelInstall = async () => { cancel.resolve(); return { status: 'cancelled' }; };
+  await update(f); await started.promise; const id = (await f.engine.snapshot()).job.id;
+  await f.engine.stopUpdate({ id }); await restoring.promise;
+  await assert.rejects(f.engine.stopUpdate({ id }), /恢复/);
+  restored.resolve(); const result = await f.engine.waitForIdle();
+  assert.equal(result.job.phase, 'cancelled'); assert.equal(result.plugins[0].enabled, false);
+  assert.equal(result.plugins[0].installedVersion, '1.0.0');
+});
 
 test('native update ownership is known before checks and follows host eligibility', async () => {
   const f = fixture();
