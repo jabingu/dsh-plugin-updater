@@ -17,8 +17,9 @@ export async function sdkFixture() {
   if (!raw) throw new Error('SDK CSS unavailable');
   const css = JSON.parse(raw[1]);
   const prefix = css.match(/\.([\w-]+)_cardHead\{/)[1];
-  return { version, client, sidebar, manager, css, prefix,
+  const nativeUpdates = manager.includes('async updateBundle(');
+  return { version, client, sidebar, manager, css, prefix, nativeUpdates,
     detailFunctions: ['rowRef', 'packageRef', 'DetailTop', 'PackageDetail', 'updateAvailable',
-      ...(version === '0.2.2-rc.1' ? ['versionUpdate', 'updateCandidate', 'installable'] : [])].map(declaration).join('\n'),
+      ...(nativeUpdates ? ['versionUpdate', 'updateCandidate', 'installable'] : [])].map(declaration).join('\n'),
     functions: declaration('CardHead') + declaration('PackageCard') };
 }

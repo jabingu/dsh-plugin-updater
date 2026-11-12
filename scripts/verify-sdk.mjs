@@ -17,10 +17,13 @@ runInNewContext(readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8
   AbortController, setTimeout, clearTimeout,
 });
 const sdk = await sdkFixture();
-for (const text of ['"data-plugin-package": pkg.name', 'renderGroup("bundles"', '"plugins.detail.actions"', '"plugins.detail.badge"', '"plugins.detail.section"']) assert.ok(sdk.client.includes(text), text);
+assert.match(sdk.client, /"data-plugin-package":\s*pkg\.name/);
+assert.match(sdk.client, /renderGroup\(["\x60]bundles["\x60]/);
+for (const slot of ['plugins.detail.actions', 'plugins.detail.badge', 'plugins.detail.section']) assert.ok(sdk.client.includes(slot), slot);
 for (const method of ['listBundles()', 'installBundle(spec, options)', 'removeBundle(name)', 'async registries()', 'async cancelInstall(requestId)']) assert.ok(sdk.manager.includes(method), method);
-if (sdk.version === '0.2.2-rc.1') assert.ok(sdk.manager.includes('async updateBundle(name, version, options)'));
-assert.ok(sdk.sidebar.includes('"aria-label": label') && sdk.sidebar.includes('"nav"'));
+if (sdk.nativeUpdates) assert.ok(sdk.manager.includes('async updateBundle(name, version, options)'));
+assert.match(sdk.sidebar, /"aria-label":\s*label/);
+assert.match(sdk.sidebar, /["\x60]nav["\x60]/);
 const dom = new JSDOM('<html><head></head><body><div id="root"></div></body></html>');
 const previous = { window: globalThis.window, document: globalThis.document };
 globalThis.window = dom.window; globalThis.document = dom.window.document;
@@ -28,9 +31,9 @@ const styles = new Proxy({}, { get: (_, key) => `${sdk.prefix}_${key}` });
 const Empty = () => null;
 const Enable = ({ pkg, onSetEnabled }) => React.createElement('input', { type: 'checkbox', role: 'switch', checked: pkg.enabled, onChange: e => onSetEnabled(e.target.checked) });
 const { PackageCard } = new Function('react', 'react_jsx_runtime', '_deepseek_ai_dsh_client_ui_primitives',
-  'PluginManagerPage_module_css_default', 'packageText', 'packageStatus', 'PackageArtwork', 'EnableSwitch', 'MetadataError', 'updateAvailable',
+  'PluginManagerPage_module_css_default', 'packageText', 'packageStatus', 'PackageArtwork', 'EnableSwitch', 'MetadataError', 'updateAvailable', 'StatusTag',
   `${sdk.functions}\nreturn {PackageCard};`)(React, jsxRuntime, { Tag: ({ children }) => React.createElement('span', null, children) },
-  styles, p => ({ title: p.name, description: p.description }), p => p.enabled ? 'running' : 'disabled', Empty, Enable, Empty, () => false);
+  styles, p => ({ title: p.name, description: p.description }), p => p.enabled ? 'running' : 'disabled', Empty, Enable, Empty, () => false, Empty);
 let current = { plugins: [{ name: 'dsh-example', installedVersion: '1.0.0', targetVersion: '1.1.0', status: 'available', enabled: false, notes: 'Release notes' }], autoCheck: true };
 const listeners = new Set();
 const store = { getSnapshot: () => current, subscribe: f => { listeners.add(f); return () => listeners.delete(f); }, check: async () => {}, update: async () => {}, setSchedule: async () => {} };
@@ -57,7 +60,7 @@ try {
     const {react, react_jsx_runtime, _deepseek_ai_dsh_client_ui_primitives,
       PluginManagerPage_module_css_default, packageText, packageStatus, PackageArtwork,
       EnableSwitch, MetadataError, RowsSection, VersionSection, SourceSection, PackagePreview,
-      managementText, BUNDLE_PREVIEWS} = dependencies;
+      managementText, BUNDLE_PREVIEWS, StatusTag} = dependencies;
     ${sdk.detailFunctions}
     return PackageDetail;
   `)({
@@ -71,9 +74,9 @@ try {
     packageText: p => ({ title: p.name, description: p.description }),
     packageStatus: () => 'running', PackageArtwork: Empty, EnableSwitch: Enable,
     MetadataError: Empty, RowsSection: Empty, VersionSection: Empty, SourceSection: Empty,
-    PackagePreview: Empty, managementText: () => '', BUNDLE_PREVIEWS: new Map(),
+    PackagePreview: Empty, managementText: () => '', BUNDLE_PREVIEWS: new Map(), StatusTag: Empty,
   });
-  const nativeUpdates = sdk.version === '0.2.2-rc.1';
+  const { nativeUpdates } = sdk;
   let nativeCalls = 0;
   const available = { ...current.plugins[0], nativeUpdates };
   function renderDetail(nativeReady) {

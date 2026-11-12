@@ -10,10 +10,10 @@ const bundle = { name: 'dsh-example', version: '0.25.0', installed: true, offici
 const manifest = (version, extra = {}) => ({ name: bundle.name, version, dsh: { bundle: { patch: './cordis.patch.yml' } }, ...extra });
 const candidate = (version, extra = {}) => ({ manifest: manifest(version, extra), spec: `dsh-example@${version}` });
 
-test('published metadata admits both verified DSH runtimes and their Cordis versions', () => {
+test('published metadata admits the verified DSH runtimes and their Cordis versions', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
-  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1']) {
+  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2']) {
     assert.equal(compatibilityReason(pkg, runtime), null);
     for (const [name, range] of Object.entries(pkg.peerDependencies)) {
       if (name !== '@deepseek-ai/cordis') assert.equal(semver.satisfies(runtime, range), true, name);
