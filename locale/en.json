@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Plugin Updater",
-    "description": "Check user-installed plugins for new versions and update them on demand."
+    "description": "Check user-installed plugins for new versions and update them on demand.",
+    "detail": "locale/detail.en.md"
   }
 }

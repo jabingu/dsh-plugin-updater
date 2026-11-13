@@ -8,7 +8,7 @@ A plugin update checker for [DeepSeek Harness](https://github.com/deepseek-ai/de
 
 | Item | Current version / requirement |
 | --- | --- |
-| Plugin | `0.1.5` (package: `dsh-plugin-updater`) |
+| Plugin | `0.1.6` (package: `dsh-plugin-updater`) |
 | DSH | `0.2.1-rc.5` or the `0.2.2` series from `rc.1` onward (official desktop app) |
 | License | [MIT](./LICENSE) |
 
@@ -64,7 +64,7 @@ For a linked installation, update the original directory, rebuild and restart DS
 
 ### From a package archive
 
-Enter the absolute path of `dsh-plugin-updater-0.1.5.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
+Enter the absolute path of `dsh-plugin-updater-0.1.6.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
 
 The desktop app manages its own profile; use its plugin page. If you use `dsh web`, run from the plugin directory:
 
