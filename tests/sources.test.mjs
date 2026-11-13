@@ -10,17 +10,22 @@ const bundle = { name: 'dsh-example', version: '0.25.0', installed: true, offici
 const manifest = (version, extra = {}) => ({ name: bundle.name, version, dsh: { bundle: { patch: './cordis.patch.yml' } }, ...extra });
 const candidate = (version, extra = {}) => ({ manifest: manifest(version, extra), spec: `dsh-example@${version}` });
 
-test('published metadata admits the verified DSH runtimes and their Cordis versions', () => {
+test('published metadata admits the supported DSH release line and its Cordis versions', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
-  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2']) {
+  const dshRange = pkg.engines.dsh;
+  for (const [name, range] of Object.entries(pkg.peerDependencies)) {
+    if (name.startsWith('@deepseek-ai/dsh')) assert.equal(range, dshRange, name);
+  }
+  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2']) {
     assert.equal(compatibilityReason(pkg, runtime), null);
-    for (const [name, range] of Object.entries(pkg.peerDependencies)) {
-      if (name !== '@deepseek-ai/cordis') assert.equal(semver.satisfies(runtime, range), true, name);
-    }
+    assert.equal(semver.satisfies(runtime, dshRange), true, runtime);
   }
   for (const cordis of ['4.0.5', '4.1.0']) assert.equal(semver.satisfies(cordis, pkg.peerDependencies['@deepseek-ai/cordis']), true);
-  for (const runtime of ['0.2.0-rc.2', '0.2.2-alpha.3', '0.2.3-rc.1']) assert.match(compatibilityReason(pkg, runtime), /需要 DSH/);
+  for (const runtime of ['0.2.0-rc.2', '0.2.2-alpha.3', '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1']) {
+    assert.match(compatibilityReason(pkg, runtime), /需要 DSH/);
+    assert.equal(semver.satisfies(runtime, dshRange), false, runtime);
+  }
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.deepEqual(lock.packages[''].engines, pkg.engines);
