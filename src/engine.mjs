@@ -45,6 +45,8 @@ export function createUpdater({ manager, inspector, store, runtimeVersion, hmr =
     writes = work; return work;
   };
   const list = async () => userBundles(await manager.listBundles()).slice(0,1000);
+  const supportsNativeUpdate = bundle => typeof manager.updateBundle === 'function'
+    && (bundle.update === 'registry' || bundle.updatable === true);
   function dueAt() {
     if (!state.autoCheck) return null;
     const last = Date.parse(state.lastAttemptAt);
@@ -59,7 +61,7 @@ export function createUpdater({ manager, inspector, store, runtimeVersion, hmr =
     const entry = {
       name: bundle.name, installedVersion: bundle.version ?? '', enabled: bundle.enabled === true,
       sourceKind: source.kind, status: 'unchecked', checkedAt: null,
-      nativeUpdates: typeof manager.updateBundle === 'function' && bundle.updatable === true,
+      nativeUpdates: supportsNativeUpdate(bundle),
     };
     if (valid) for (const field of ['status', 'checkedAt', 'latestVersion', 'targetVersion', 'reason', 'notes', 'url', 'token']) {
       if (record[field] !== undefined) entry[field] = record[field];
@@ -269,7 +271,7 @@ export function createUpdater({ manager, inspector, store, runtimeVersion, hmr =
     if (verified.status !== 'available' || candidate?.manifest.version !== request.version || candidate.spec !== cached.spec) throw new Error('上游版本或兼容性已变化，请重新检查');
     const oldSource = sourceOf(bundle);
     if (job.cancelRequested) throw stoppedError();
-    if (typeof manager.updateBundle === 'function' && bundle.updatable === true && oldSource.kind === 'npm') {
+    if (supportsNativeUpdate(bundle) && oldSource.kind === 'npm') {
       const latest = (await list()).find(b => b.name === bundle.name);
       if (!latest || fingerprint(latest, runtimeVersion) !== cached.fingerprint) throw new Error('插件安装状态已变化，请重新检查');
       if (job.cancelRequested) throw stoppedError();

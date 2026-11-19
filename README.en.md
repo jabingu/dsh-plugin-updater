@@ -8,7 +8,7 @@ A plugin update checker for [DeepSeek Harness](https://github.com/deepseek-ai/de
 
 | Item | Current version / requirement |
 | --- | --- |
-| Plugin | `0.1.6` (package: `dsh-plugin-updater`) |
+| Plugin | `0.1.7` (package: `dsh-plugin-updater`) |
 | DSH | `0.2.1-rc.5` or the `0.2.2` series from `rc.1` onward (official desktop app) |
 | License | [MIT](./LICENSE) |
 
@@ -24,6 +24,8 @@ A plugin update checker for [DeepSeek Harness](https://github.com/deepseek-ai/de
 Checks cover user-installed plugins. Built-in plugins and experimental plugins supplied with DSH are excluded. Automatic checks pause while DSH is closed and catch up on startup. A failed check is retried automatically no sooner than one hour later; manual checks remain available.
 
 For packages eligible for native DSH updates, the detail page uses the native update action. Other sources and older hosts use the contributed action. Check completion order does not add duplicate detail actions or update badges.
+
+Version `0.1.7` fixes duplicate update buttons and badges after a DSH upgrade by recognizing both current and legacy native update metadata.
 
 Version `0.1.3` uses the native DSH update workflow from the overview when the host supports it. Stop an active task from its row or group header. The task waits for confirmed cancellation and recovery, and explains when activation or recovery is in progress. An unconfirmed stop can be retried after 15 seconds.
 
@@ -64,7 +66,7 @@ For a linked installation, update the original directory, rebuild and restart DS
 
 ### From a package archive
 
-Enter the absolute path of `dsh-plugin-updater-0.1.6.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
+Enter the absolute path of `dsh-plugin-updater-0.1.7.tgz` in the same Add plugin dialog, then install and enable it. Check for an existing installation first.
 
 The desktop app manages its own profile; use its plugin page. If you use `dsh web`, run from the plugin directory:
 
@@ -109,9 +111,9 @@ npm run build
 npm test
 ```
 
-All **79 automated tests pass**, covering plugin scope, npm/GitHub sources, compatibility, daily scheduling, settings persistence, recovery, enablement and page cleanup. Actual DSH components and Chrome were also used to check desktop and narrow layouts.
+All **80 automated tests pass**, covering plugin scope, npm/GitHub sources, compatibility, daily scheduling, settings persistence, recovery, enablement and page cleanup. Actual DSH components and Chrome were also used to check desktop and narrow layouts.
 
-Compatibility and browser checks passed with the official `0.2.2-rc.2` components. The range in `0.1.5` covers later release candidates and the stable release in the `0.2.2` series. Runtime verification for those versions awaits their release.
+A single detail-page update action was verified with the official `0.2.1-rc.5`, `0.2.2-rc.1`, `0.2.2-rc.2`, and `0.2.2-rc.5` components. Badge deduplication was also confirmed in the overview and detail page of the local `0.2.2-rc.5` desktop app. The compatibility range introduced in `0.1.5` covers later release candidates and the stable release in the `0.2.2` series. Runtime checks for later versions follow their release.
 
 The checker has been enabled and used to discover updates in the official `0.2.1-rc.5` and `0.2.2-rc.1` desktop apps. The group action, sidebar indicator and automatic-check setting were verified. Version `0.1.1` fixes the compatibility block after upgrading DSH and supports Cordis `4.1.0`. Real plugin replacement, activation after restart and recovery on restricted networks still require verification. See the [verification record](./docs/verification.md) (Chinese).
 

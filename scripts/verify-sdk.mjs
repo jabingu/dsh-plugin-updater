@@ -8,6 +8,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { sdkFixture } from './sdk-fixture.mjs';
+import { createUpdater } from '../src/engine.mjs';
 import { summaryText, badgeCount, versionText, updateActive, updateProgressText } from '../src/common.mjs';
 const require = createRequire(import.meta.url);
 const { createDomAdapter } = require('../src/dom.cjs');
@@ -77,8 +78,21 @@ try {
     PackagePreview: Empty, managementText: () => '', BUNDLE_PREVIEWS: new Map(), StatusTag: Empty,
   });
   const { nativeUpdates } = sdk;
+  const updater = createUpdater({
+    manager: {
+      listBundles: async () => [{ ...packageInfo, source: 'dsh-example@1.0.0', ...sdk.nativeUpdateMetadata }],
+      ...(nativeUpdates ? { updateBundle: async () => {} } : {}),
+    },
+    inspector: async () => ({ status: 'available', latestVersion: '1.1.0', candidate: {
+      manifest: { name: packageInfo.name, version: '1.1.0' }, spec: 'dsh-example@1.1.0', notes: 'Release notes',
+    } }),
+    store: { load: async () => ({ results: {} }), save: async () => {} }, runtimeVersion: sdk.version,
+  });
+  assert.equal((await updater.snapshot()).plugins[0].nativeUpdates, nativeUpdates, 'native ownership before checks');
+  const checked = await updater.check();
+  await updater.dispose();
   let nativeCalls = 0;
-  const available = { ...current.plugins[0], nativeUpdates };
+  const available = checked.plugins[0];
   function renderDetail(nativeReady) {
     flushSync(() => root.render(React.createElement(PackageDetail, {
       pkg: packageInfo, t: (key, values) => key === 'versionsUpdateLabel' ? `Update to ${values.version}` : key,

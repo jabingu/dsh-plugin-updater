@@ -44,20 +44,25 @@ function deferred() {
 const nativeBundle = { name: 'dsh-example', version: '1.0.0', source: 'dsh-example@1.0.0',
   installed: true, enabled: false, availability: 'profile', updatable: true };
 
-test('eligible overview updates call the native updater exactly once', async () => {
-  const f = fixture(); f.setBundles([nativeBundle]);
-  let request;
-  f.manager.updateBundle = async (name, version, options) => {
-    request = { name, version, options };
-    f.setBundles([{ ...nativeBundle, version, source: name + '@' + version }]);
-    return { from: '1.0.0', to: version, step: 'install', result: { application: 'applied' } };
-  };
-  await update(f); const result = await f.engine.waitForIdle();
-  assert.equal(request.name, nativeBundle.name); assert.equal(request.version, '1.1.0');
-  assert.equal(request.options.requestId, result.job.id);
-  assert.equal(result.job.phase, 'complete');
-  assert.deepEqual(f.calls, [], 'the wrapper must not remove or reinstall around the native update');
-});
+for (const [host, eligibility] of Object.entries({ legacy: { updatable: true }, current: { update: 'registry' } })) {
+  test(`${host} overview updates call the native updater exactly once`, async () => {
+    const { updatable, ...installed } = nativeBundle;
+    const bundle = { ...installed, ...eligibility };
+    const f = fixture(); f.setBundles([bundle]);
+    let request;
+    f.manager.updateBundle = async (name, version, options) => {
+      request = { name, version, options };
+      f.setBundles([{ ...bundle, version, source: name + '@' + version }]);
+      return { from: '1.0.0', to: version, step: 'install', result: { application: 'applied' } };
+    };
+    assert.equal((await f.engine.snapshot()).plugins[0].nativeUpdates, true);
+    await update(f); const result = await f.engine.waitForIdle();
+    assert.equal(request.name, nativeBundle.name); assert.equal(request.version, '1.1.0');
+    assert.equal(request.options.requestId, result.job.id);
+    assert.equal(result.job.phase, 'complete');
+    assert.deepEqual(f.calls, [], 'the wrapper must not remove or reinstall around the native update');
+  });
+}
 test('native update failure uses the host restoration result without a second rollback', async () => {
   const f = fixture(); f.setBundles([nativeBundle]);
   f.manager.updateBundle = async () => ({ step: 'install', result: { application: 'failed' }, restore: { application: 'applied' } });

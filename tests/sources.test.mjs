@@ -17,7 +17,7 @@ test('published metadata admits the supported DSH release line and its Cordis ve
   for (const [name, range] of Object.entries(pkg.peerDependencies)) {
     if (name.startsWith('@deepseek-ai/dsh')) assert.equal(range, dshRange, name);
   }
-  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2']) {
+  for (const runtime of ['0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2-rc.5', '0.2.2']) {
     assert.equal(compatibilityReason(pkg, runtime), null);
     assert.equal(semver.satisfies(runtime, dshRange), true, runtime);
   }

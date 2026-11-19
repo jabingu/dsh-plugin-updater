@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-updater",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Check for updates to user-installed DSH plugins, show update badges, and update on demand.",
   "type": "module",
   "license": "MIT",
